@@ -94,9 +94,25 @@ def require_admin(request: Request):
     return email
 
 
+def _nav_section(path):
+    """Which sidebar link to highlight. A client's detail page (/admin/clients/{id})
+    falls under Dashboard - it's reached by clicking a client row there, not
+    a nav item of its own - but /admin/clients/new is its own link."""
+    if path == "/admin/clients/new":
+        return "add"
+    if path.startswith("/admin/plans"):
+        return "plans"
+    if path.startswith("/admin/settings"):
+        return "settings"
+    if path.startswith("/admin"):
+        return "dashboard"
+    return ""
+
+
 def ctx(request: Request, **extra):
     base = dict(request=request, business=settings.business_name(),
-               rzp_ready=settings.razorpay_ready(), rzp_mode=settings.razorpay_mode())
+               rzp_ready=settings.razorpay_ready(), rzp_mode=settings.razorpay_mode(),
+               nav=_nav_section(request.url.path))
     base.update(extra)
     return base
 
@@ -160,25 +176,41 @@ def logout():
 
 
 # ---------------------------------------------------------------- dashboard
+def _empty_dashboard(error):
+    return ([], {}, {"clients": 0, "products": 0, "subscriptions": 0, "by_status": {},
+                     "mrr_paise": 0, "error": error})
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def dashboard(request: Request):
     require_admin(request)
-    stats = store.dashboard_stats()
     try:
-        clients = store.list_rows("clients", limit=500)
-        subs = store.list_rows("subscriptions", limit=1000)
-        plans_by_id = {p["id"]: p for p in store.list_rows("plans", limit=500)}
+        # One concurrent round trip for all four tables instead of up to six
+        # sequential ones (the previous version fetched clients/subscriptions
+        # twice over, once for stats and again for the table) - this was the
+        # actual reason the dashboard felt slow to load.
+        clients, subs, plans, products = store.fetch_many([
+            dict(table="clients", limit=500),
+            dict(table="subscriptions", limit=1000),
+            dict(table="plans", limit=500),
+            dict(table="products", limit=10000),
+        ])
     except Exception as exc:
-        # Same reasoning as dashboard_stats(): a database hiccup should show
-        # a banner, not take down the page everyone lands on after signing in.
-        clients, plans_by_id = [], {}
-        stats = dict(stats, error=stats.get("error") or "%s: %s" % (type(exc).__name__, exc))
+        clients, plans_by_id, stats = _empty_dashboard("%s: %s" % (type(exc).__name__, exc))
     else:
+        plans_by_id = {p["id"]: p for p in plans}
         by_client = {}
+        by_status = {}
+        mrr_paise = 0
         for s in subs:
             by_client.setdefault(s["client_id"], []).append(s)
+            by_status[s["status"]] = by_status.get(s["status"], 0) + 1
+            if s["status"] == "active":
+                mrr_paise += s["amount_paise"]
         for c in clients:
             c["subs"] = by_client.get(c["id"], [])
+        stats = {"clients": len(clients), "products": len(products), "subscriptions": len(subs),
+                 "by_status": by_status, "mrr_paise": mrr_paise, "error": None}
     return T.TemplateResponse("dashboard.html", ctx(
         request, stats=stats, clients=clients, plans_by_id=plans_by_id))
 

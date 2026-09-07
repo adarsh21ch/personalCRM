@@ -12,6 +12,7 @@ per-table copy of the same eight lines six times over is not a real
 abstraction, it is a chance for one of the six to drift.
 """
 import os, sqlite3, uuid, threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
@@ -191,6 +192,21 @@ def list_rows(table, where=None, order="created_at.desc", limit=500):
     return [dict(r) for r in rs]
 
 
+def fetch_many(specs):
+    """Run several list_rows() calls concurrently and return their results in
+    the same order. Supabase mode is dominated by per-request network
+    latency, not CPU - a page needing four tables was paying for four
+    sequential round trips for no reason. SQLite mode still runs them one
+    after another under _lock, so this only helps where it actually can.
+
+    specs: list of dicts, each the kwargs for one list_rows() call
+    (must include "table"; where/order/limit optional)."""
+    if not USE_SUPABASE or len(specs) <= 1:
+        return [list_rows(**spec) for spec in specs]
+    with ThreadPoolExecutor(max_workers=len(specs)) as pool:
+        return list(pool.map(lambda spec: list_rows(**spec), specs))
+
+
 def delete(table, row_id):
     table = _t(table)
     if USE_SUPABASE:
@@ -234,33 +250,6 @@ def settings_delete(key):
         return
     with _lock, _conn() as c:
         c.execute("DELETE FROM %s WHERE key = ?" % table, (key,))
-
-
-# ------------------------------------------------------------------ dashboard
-def dashboard_stats():
-    """Never raises. A database hiccup should degrade the dashboard to zeros
-    with a note, not crash the one page every session starts on."""
-    try:
-        subs = list_rows("subscriptions", limit=10000)
-        clients = list_rows("clients", limit=10000)
-        products = list_rows("products", limit=10000)
-    except Exception as exc:
-        return {"clients": 0, "products": 0, "subscriptions": 0, "by_status": {},
-                "mrr_paise": 0, "error": "%s: %s" % (type(exc).__name__, exc)}
-    by_status = {}
-    mrr_paise = 0
-    for s in subs:
-        by_status[s["status"]] = by_status.get(s["status"], 0) + 1
-        if s["status"] == "active":
-            mrr_paise += s["amount_paise"]
-    return {
-        "clients": len(clients),
-        "products": len(products),
-        "subscriptions": len(subs),
-        "by_status": by_status,
-        "mrr_paise": mrr_paise,
-        "error": None,
-    }
 
 
 def backend():
