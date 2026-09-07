@@ -25,7 +25,12 @@ from fastapi.templating import Jinja2Templates
 import store, settings, auth, rzp, notify
 
 app = FastAPI(title="Personal CRM", docs_url=None, redoc_url=None)
-app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
+# check_dir=False: StaticFiles raises at construction time if the directory is
+# missing, which on a serverless platform would crash EVERY request (the app
+# object is rebuilt on each cold start) rather than just the /static ones -
+# a bundling quirk should degrade one route, not take the whole app down.
+app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static"), check_dir=False),
+          name="static")
 T = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 
 DEFAULT_PLANS = [
@@ -62,11 +67,19 @@ T.env.globals["status_group"] = lambda s: STATUS_GROUPS.get(s, "pending")
 
 @app.on_event("startup")
 def _startup():
-    store.init()
-    if not store.list_rows("plans", limit=1):
-        for name, amount in DEFAULT_PLANS:
-            store.insert("plans", {"name": name, "amount_paise": amount,
-                                   "interval": "monthly", "active": 1})
+    # On a serverless platform this runs on every cold start, not once at
+    # deploy - so a transient or misconfigured database must not take the
+    # whole app down (every route, including the login page and /healthz).
+    # Let it through here; individual routes that touch the database will
+    # surface their own error instead of the app refusing to serve anything.
+    try:
+        store.init()
+        if not store.list_rows("plans", limit=1):
+            for name, amount in DEFAULT_PLANS:
+                store.insert("plans", {"name": name, "amount_paise": amount,
+                                       "interval": "monthly", "active": 1})
+    except Exception as exc:
+        print("startup: database not ready yet (%s): %s" % (type(exc).__name__, exc))
 
 
 # --------------------------------------------------------------------- auth
