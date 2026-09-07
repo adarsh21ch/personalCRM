@@ -80,7 +80,32 @@
     </tr>
     {% endfor %}
   </table>
-  {% else %}<p class="muted">No subscription yet — generate a link below.</p>{% endif %}
+  {% elif not pending_links %}
+  <p class="muted">No subscription yet — generate a link below.</p>
+  {% endif %}
+
+  {% if pending_links %}
+  <div style="margin-bottom:16px;">
+    <div class="muted" style="font-size:12.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">
+      Link{{ 's' if pending_links|length > 1 }} sent, waiting on the client
+    </div>
+    {% for t in pending_links %}
+    <div class="link-box" style="flex-direction:column;align-items:stretch;gap:8px;margin-top:0;margin-bottom:8px;">
+      <div class="row" style="justify-content:space-between;">
+        <span><strong>{{ t.plan.name if t.plan else 'Plan removed' }}</strong>
+          {% if t.plan %}— ₹{{ t.plan.amount_paise | rupees }}/mo{% endif %}
+          <span class="muted"> · generated {{ t.created_at[:10] }}</span></span>
+      </div>
+      <span style="word-break:break-all;">{{ t.url }}</span>
+      <form method="post" action="/admin/clients/{{ client.id }}/send-link" class="row">
+        <input type="hidden" name="token" value="{{ t.token }}">
+        <button type="submit" name="channel" value="whatsapp" class="btn secondary" style="font-size:12px;padding:5px 10px;">Send via WhatsApp</button>
+        <button type="submit" name="channel" value="email" class="btn secondary" style="font-size:12px;padding:5px 10px;">Send via email</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <form method="post" action="/admin/clients/{{ client.id }}/link" class="row">
     <select name="plan_id" required style="flex:1;">
@@ -90,7 +115,7 @@
       <option value="">(no specific product)</option>
       {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
     </select>
-    <button type="submit">Generate onboarding link</button>
+    <button type="submit">{{ 'Generate another link' if pending_links else 'Generate onboarding link' }}</button>
   </form>
 </div>
 

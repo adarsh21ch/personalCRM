@@ -21,6 +21,8 @@
   <div class="stat-card"><div class="n">{{ stats.products }}</div><div class="l">Products / websites</div></div>
   <div class="stat-card"><div class="n">{{ stats.by_status.get('active', 0) }}</div><div class="l">Active subscriptions</div></div>
   <div class="stat-card"><div class="n">₹{{ stats.mrr_paise | rupees }}</div><div class="l">Monthly recurring revenue</div></div>
+  <div class="stat-card"><div class="n">₹{{ stats.collected_paise | rupees }}</div><div class="l">Total collected (all-time)</div></div>
+  <div class="stat-card"><div class="n">₹{{ stats.pending_paise | rupees }}</div><div class="l">Pending / at-risk</div></div>
 </div>
 
 <h2>Clients</h2>

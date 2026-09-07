@@ -178,22 +178,23 @@ def logout():
 # ---------------------------------------------------------------- dashboard
 def _empty_dashboard(error):
     return ([], {}, {"clients": 0, "products": 0, "subscriptions": 0, "by_status": {},
-                     "mrr_paise": 0, "error": error})
+                     "mrr_paise": 0, "collected_paise": 0, "pending_paise": 0, "error": error})
 
 
 @app.get("/admin", response_class=HTMLResponse)
 def dashboard(request: Request):
     require_admin(request)
     try:
-        # One concurrent round trip for all four tables instead of up to six
+        # One concurrent round trip for all five tables instead of up to six
         # sequential ones (the previous version fetched clients/subscriptions
         # twice over, once for stats and again for the table) - this was the
         # actual reason the dashboard felt slow to load.
-        clients, subs, plans, products = store.fetch_many([
+        clients, subs, plans, products, payments = store.fetch_many([
             dict(table="clients", limit=500),
             dict(table="subscriptions", limit=1000),
             dict(table="plans", limit=500),
             dict(table="products", limit=10000),
+            dict(table="payments", limit=10000),
         ])
     except Exception as exc:
         clients, plans_by_id, stats = _empty_dashboard("%s: %s" % (type(exc).__name__, exc))
@@ -202,15 +203,24 @@ def dashboard(request: Request):
         by_client = {}
         by_status = {}
         mrr_paise = 0
+        pending_paise = 0
         for s in subs:
             by_client.setdefault(s["client_id"], []).append(s)
             by_status[s["status"]] = by_status.get(s["status"], 0) + 1
             if s["status"] == "active":
                 mrr_paise += s["amount_paise"]
+            # "pending" here = money expected but not yet actually collected:
+            # mandate not confirmed yet, or charges failing (halted). Distinct
+            # from MRR, which is confirmed active revenue, and from collected,
+            # which is what has actually landed.
+            if STATUS_GROUPS.get(s["status"]) in ("pending", "declined"):
+                pending_paise += s["amount_paise"]
         for c in clients:
             c["subs"] = by_client.get(c["id"], [])
+        collected_paise = sum(p["amount_paise"] for p in payments if p["status"] == "captured")
         stats = {"clients": len(clients), "products": len(products), "subscriptions": len(subs),
-                 "by_status": by_status, "mrr_paise": mrr_paise, "error": None}
+                 "by_status": by_status, "mrr_paise": mrr_paise, "collected_paise": collected_paise,
+                 "pending_paise": pending_paise, "error": None}
     return T.TemplateResponse("dashboard.html", ctx(
         request, stats=stats, clients=clients, plans_by_id=plans_by_id))
 
@@ -251,14 +261,27 @@ def client_detail(request: Request, client_id: str, link: str = None):
     all_plans = store.list_rows("plans", order="amount_paise.asc")
     plans_by_id = {p["id"]: p for p in all_plans}
     active_plans = [p for p in all_plans if p["active"]]
+
+    # Links already sent but not yet acted on: a link generated here does NOT
+    # create a subscription row - that only happens once the client actually
+    # opens it and starts checkout. Without this, the operator has no way to
+    # tell "already sent, waiting on them" from "never sent" and the plan
+    # picker below just resets to the cheapest plan every time, looking like
+    # nothing happened.
+    base_url = str(request.base_url).rstrip("/")
+    all_tokens = store.list_rows("onboard_tokens", where={"client_id": client_id})
+    pending_links = [dict(t, plan=plans_by_id.get(t["plan_id"]),
+                          url="%s/subscribe/%s" % (base_url, t["token"]))
+                     for t in all_tokens if not t.get("subscription_id")]
+    pending_links.sort(key=lambda t: t["created_at"], reverse=True)
+
     link_url = None
     if link:
-        base = str(request.base_url).rstrip("/")
-        link_url = "%s/subscribe/%s" % (base, link)
+        link_url = "%s/subscribe/%s" % (base_url, link)
     return T.TemplateResponse("client_detail.html", ctx(
         request, client=client, products=products, subs=subs, payments=payments,
         plans=active_plans, plans_by_id=plans_by_id, link_url=link_url,
-        sent=request.query_params.get("sent")))
+        pending_links=pending_links, sent=request.query_params.get("sent")))
 
 
 @app.post("/admin/clients/{client_id}/edit")
