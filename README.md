@@ -61,18 +61,44 @@ with Razorpay's test card `4111 1111 1111 1111`.
 5. Watch the client's status move from *Awaiting checkout* → *Mandate
    confirmed* → *Active* as Razorpay's webhooks arrive.
 
-## Deploy
+## Deploy — Vercel (free)
 
-`Dockerfile` + `render.yaml` are set up for Render (free tier to start —
-state lives in Supabase if you configure it, so no paid disk needed; without
-Supabase, add a small persistent disk mounted at `/tmp` or set `CRM_DB` to a
-disk path, since the container's local filesystem does not survive a
-restart otherwise).
+`api/index.py` re-exports the FastAPI app for Vercel's Python runtime, and
+`vercel.json` rewrites every path to it. **Supabase is required on Vercel** —
+serverless functions have no persistent disk, so `SUPABASE_URL` /
+`SUPABASE_SERVICE_KEY` must both be set or the app has nowhere durable to
+write.
 
-Either connect the repo in the Render dashboard (it will read `render.yaml`)
-or point any other host at the `Dockerfile` / `Procfile`. Required env vars
-are listed in `render.yaml` and `.env.example`; everything else is entered
-from `/admin/settings` after the first deploy.
+1. Vercel dashboard → **Add New → Project** → import the GitHub repo.
+   Framework preset: **Other** (it auto-detects Python from
+   `requirements.txt` at the repo root).
+2. Environment variables (Project → Settings → Environment Variables):
+   `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_EMAIL`,
+   `ADMIN_PASSWORD_HASH`, `ADMIN_SECRET`, `SETTINGS_KEY` — same values as
+   below. `PORT` / `CRM_DB` are not used on Vercel.
+3. Deploy. Check `https://<your-project>.vercel.app/healthz` →
+   `"ok": true, "backend": "supabase"`.
+4. **Custom domain**: Project → Settings → Domains → add
+   `personalcrm.nevorai.com`. Vercel shows a CNAME target
+   (`cname.vercel-dns.com`) — add that as a CNAME record for `personalcrm`
+   in your DNS provider's zone for `nevorai.com`. Vercel issues the TLS
+   certificate automatically once the record resolves.
+
+One thing worth knowing: the admin login's brute-force lockout
+(`app/auth.py`) tracks failed attempts in an in-process dict. That's solid
+on a single long-lived container; on Vercel, concurrent cold starts are
+isolated instances, so the lockout doesn't reliably span all of them. Not a
+real exposure for a private, single-operator tool behind a real password —
+just not the same guarantee a persistent server gives you.
+
+## Deploy — Render / any Docker host (alternative)
+
+`Dockerfile` + `render.yaml` are also included, if you'd rather run this as
+a normal long-lived container instead of serverless — a persistent process
+is what gives the login lockout above its full guarantee, and it's the
+better fit for the SQLite fallback if you ever want to run this away from
+Supabase. Point any Docker host at `Dockerfile` / `Procfile`; required env
+vars are the same list, in `render.yaml` and `.env.example`.
 
 ## Architecture notes
 
