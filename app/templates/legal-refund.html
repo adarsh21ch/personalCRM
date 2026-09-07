@@ -1,0 +1,34 @@
+{% extends "legal.html" %}
+{% block legal_title %}Refund & Cancellation Policy{% endblock %}
+{% block legal_content %}
+<h1>Refund &amp; Cancellation Policy</h1>
+<p class="updated">Last updated {{ updated }}</p>
+
+<h2>General rule: no refund for a completed billing cycle</h2>
+<p>A subscription charge pays for that month's access to the service. Once a monthly charge has gone through
+  successfully, it is <strong>not refunded</strong> - including if you cancel partway through the month. Your
+  access continues until the end of the period you already paid for; you simply won't be charged again after
+  that, once cancelled.</p>
+
+<h2>When you DO get a refund</h2>
+<ul>
+  <li><strong>Duplicate / double charge.</strong> If you were charged twice for the same billing cycle due to a
+    processing error, the duplicate charge is refunded in full.</li>
+  <li><strong>Payment taken but service not activated.</strong> If a payment was deducted from your account but
+    your subscription failed to activate because of an error on our side, we will either fix the activation
+    immediately or refund the charge in full - your choice.</li>
+</ul>
+
+<h2>How to request one</h2>
+<p>Contact us at {{ support_email or support_phone or "our support contact" }} within 7 days of the charge, with
+  the payment reference or the date/amount of the charge. We will confirm within 2 business days whether it
+  qualifies under the cases above.</p>
+
+<h2>How refunds are paid</h2>
+<p>Approved refunds are issued to the original payment method via Razorpay, and typically appear within 5-7
+  business days, depending on your bank or card issuer.</p>
+
+<h2>Cancelling your subscription</h2>
+<p>You can cancel anytime by contacting us - see <a href="/contact">Contact Us</a>. Cancelling stops future
+  monthly charges; it does not itself trigger a refund of the current cycle, per the general rule above.</p>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "legal.html" %}
+{% block legal_title %}Terms & Conditions{% endblock %}
+{% block legal_content %}
+<h1>Terms &amp; Conditions</h1>
+<p class="updated">Last updated {{ updated }}</p>
+
+<p>These terms govern your subscription with {{ business }} ("we", "us", "our") for ongoing website,
+  application, or maintenance services delivered to you. By subscribing, you agree to these terms.</p>
+
+<h2>1. What a subscription covers</h2>
+<p>A subscription grants continued access to the specific website, application, or maintenance service
+  {{ business }} has built or maintains for you, at the plan and monthly amount shown when you subscribed.
+  Exact scope of work is whatever was agreed between you and {{ business }} directly, separately from this page.</p>
+
+<h2>2. Billing</h2>
+<p>Subscriptions are billed automatically every month via Razorpay, to the payment method you authorize when you
+  subscribe. The amount charged is the plan price in effect on your billing date. We will tell you in advance of
+  any price change to your plan before it takes effect.</p>
+
+<h2>3. Cancellation</h2>
+<p>You may cancel at any time by contacting us at {{ support_email or support_phone or "our support contact below"
+  }}. Cancelling stops future billing; it does not refund the current billing cycle, which runs to its end as
+  described in our <a href="/refund">Refund &amp; Cancellation Policy</a>.</p>
+
+<h2>4. Payment failures</h2>
+<p>If a monthly charge fails and continues to fail on retry, your subscription may be marked declined and the
+  associated service paused until payment is resolved. We will make a reasonable effort to notify you when this
+  happens.</p>
+
+<h2>5. Changes to these terms</h2>
+<p>We may update these terms from time to time. Continued use of the subscribed service after a change means you
+  accept the updated terms.</p>
+
+<h2>6. Governing law</h2>
+<p>These terms are governed by the laws of India.</p>
+
+<h2>7. Contact</h2>
+<p>Questions about these terms: see our <a href="/contact">Contact Us</a> page.</p>
+{% endblock %}

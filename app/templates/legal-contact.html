@@ -1,0 +1,15 @@
+{% extends "legal.html" %}
+{% block legal_title %}Contact Us{% endblock %}
+{% block legal_content %}
+<h1>Contact Us</h1>
+
+<p>For billing, subscription, refund or privacy questions, reach {{ business }} at:</p>
+<ul>
+  {% if support_email %}<li>Email: <a href="mailto:{{ support_email }}">{{ support_email }}</a></li>{% endif %}
+  {% if support_phone %}<li>Phone / WhatsApp: {{ support_phone }}</li>{% endif %}
+  {% if not support_email and not support_phone %}
+  <li class="muted">Support contact not configured yet - set Support email / Support phone at
+    <a href="/admin/settings">Settings</a>.</li>
+  {% endif %}
+</ul>
+{% endblock %}

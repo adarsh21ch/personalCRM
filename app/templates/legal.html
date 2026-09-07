@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block legal_title %}{% endblock %} — {{ business }}</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .legal-wrap { max-width: 680px; margin: 0 auto; padding: 40px 24px 80px; }
+  .legal-wrap h1 { font-size: 24px; margin-bottom: 4px; }
+  .legal-wrap .updated { color: var(--sub); font-size: 13px; margin-bottom: 28px; }
+  .legal-wrap h2 { font-size: 16px; margin: 26px 0 8px; }
+  .legal-wrap p, .legal-wrap li { color: var(--ink); font-size: 14.5px; line-height: 1.7; }
+  .legal-wrap ul { padding-left: 20px; }
+  .legal-nav { display: flex; gap: 16px; margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .legal-nav a { font-size: 13.5px; }
+  .legal-back { display: inline-block; margin-bottom: 18px; font-size: 13.5px; color: var(--sub); }
+</style>
+</head>
+<body>
+<div class="legal-wrap">
+  <a class="legal-back" href="javascript:history.back()">&larr; Back</a>
+  {% block legal_content %}{% endblock %}
+  <div class="legal-nav">
+    <a href="/terms">Terms &amp; Conditions</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/refund">Refund &amp; Cancellation</a>
+    <a href="/contact">Contact Us</a>
+  </div>
+</div>
+</body>
+</html>

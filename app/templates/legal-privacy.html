@@ -1,0 +1,37 @@
+{% extends "legal.html" %}
+{% block legal_title %}Privacy Policy{% endblock %}
+{% block legal_content %}
+<h1>Privacy Policy</h1>
+<p class="updated">Last updated {{ updated }}</p>
+
+<p>This describes what {{ business }} collects when you subscribe, and what we do with it.</p>
+
+<h2>1. What we collect</h2>
+<ul>
+  <li>Your name, email address and phone number, entered when you subscribe.</li>
+  <li>Which plan and product/website your subscription is for.</li>
+  <li>Payment and billing status (active, pending, failed, cancelled) and the history of charges against your
+    subscription. We do not receive or store your card, UPI or bank account details - Razorpay handles payment
+    collection directly and is PCI-DSS compliant; we only receive confirmation that a payment succeeded or failed.</li>
+</ul>
+
+<h2>2. How we use it</h2>
+<ul>
+  <li>To create and bill your subscription through Razorpay.</li>
+  <li>To send you subscription and payment-related messages by WhatsApp and/or email - onboarding links, payment
+    confirmations, and notices if a payment fails.</li>
+  <li>To respond if you contact us for support.</li>
+</ul>
+
+<h2>3. Who we share it with</h2>
+<p>Razorpay, to process your payment and mandate. Our WhatsApp/SMS and email providers, solely to deliver the
+  messages described above. We do not sell your information, and do not share it with anyone else.</p>
+
+<h2>4. How long we keep it</h2>
+<p>For as long as your subscription is active, and afterwards for as long as reasonably needed for our own
+  billing and legal records.</p>
+
+<h2>5. Your choices</h2>
+<p>Contact us (see <a href="/contact">Contact Us</a>) to ask what information we hold about you, to correct it,
+  or to ask that it be deleted once your subscription has ended.</p>
+{% endblock %}

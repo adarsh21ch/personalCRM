@@ -572,6 +572,43 @@ def _handle_payment_failed(rzp_payment):
                               "notes": (rzp_payment.get("error_description") or "")[:300]})
 
 
+# --------------------------------------------------------------- legal
+# Required before any real (non-test) Razorpay payment is collected: Razorpay
+# checks that Terms, Privacy and a Refund/Cancellation policy are reachable
+# from the page that actually takes payment (/subscribe/{token}, linked in
+# its footer). Public, unauthenticated - a prospective client reads these
+# before they've signed in to anything.
+LEGAL_UPDATED = "7 September 2026"
+
+
+def legal_ctx(request: Request, **extra):
+    base = dict(request=request, business=settings.business_name(),
+               support_email=settings.support_email(), support_phone=settings.support_phone(),
+               updated=LEGAL_UPDATED)
+    base.update(extra)
+    return base
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def legal_terms(request: Request):
+    return T.TemplateResponse("legal-terms.html", legal_ctx(request))
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def legal_privacy(request: Request):
+    return T.TemplateResponse("legal-privacy.html", legal_ctx(request))
+
+
+@app.get("/refund", response_class=HTMLResponse)
+def legal_refund(request: Request):
+    return T.TemplateResponse("legal-refund.html", legal_ctx(request))
+
+
+@app.get("/contact", response_class=HTMLResponse)
+def legal_contact(request: Request):
+    return T.TemplateResponse("legal-contact.html", legal_ctx(request))
+
+
 # --------------------------------------------------------------- misc
 @app.get("/", response_class=HTMLResponse)
 def root():
