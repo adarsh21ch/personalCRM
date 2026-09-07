@@ -5,8 +5,10 @@ configured in /admin/settings. Every function here returns (ok, info) and
 never raises - a failed notification must not take down a webhook handler
 or an admin action; the caller decides whether to surface the failure.
 """
-import smtplib, ssl
+import base64, smtplib, ssl
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 import httpx
 
@@ -102,6 +104,62 @@ def _email_gmail(to_email, subject, body):
         msg["Subject"] = subject
         msg["From"] = user
         msg["To"] = to_email
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=20) as s:
+            s.login(user, password)
+            s.sendmail(user, [to_email], msg.as_string())
+        return True, "sent"
+    except Exception as exc:
+        return False, "Email send failed: %s" % exc
+
+
+def send_email_with_attachment(to_email, subject, body, attachment_bytes, attachment_filename,
+                               attachment_mime="application/pdf"):
+    """Same provider fallback as send_email(), plus one PDF (or any binary)
+    attachment. A separate function rather than an optional param on
+    send_email() - most calls need no attachment, and this keeps that path
+    untouched."""
+    to_email = (to_email or "").strip()
+    if not to_email:
+        return False, "No email address on file."
+    if settings.get("resend_api_key"):
+        return _email_resend_attachment(to_email, subject, body, attachment_bytes,
+                                        attachment_filename, attachment_mime)
+    if settings.get("gmail_user") and settings.get("gmail_app_password"):
+        return _email_gmail_attachment(to_email, subject, body, attachment_bytes,
+                                       attachment_filename, attachment_mime)
+    return False, "No email provider configured."
+
+
+def _email_resend_attachment(to_email, subject, body, attachment_bytes, filename, mime):
+    api_key = settings.get("resend_api_key")
+    from_addr = settings.get("resend_from_email") or "onboarding@resend.dev"
+    try:
+        with httpx.Client(timeout=20) as c:
+            r = c.post("https://api.resend.com/emails",
+                      headers={"Authorization": "Bearer " + api_key},
+                      json={"from": from_addr, "to": [to_email], "subject": subject, "text": body,
+                            "attachments": [{"filename": filename,
+                                             "content": base64.b64encode(attachment_bytes).decode("ascii")}]})
+        if r.status_code >= 300:
+            return False, "Email send failed: %s" % r.text[:200]
+        return True, "sent"
+    except Exception as exc:
+        return False, "Email send failed: %s" % exc
+
+
+def _email_gmail_attachment(to_email, subject, body, attachment_bytes, filename, mime):
+    user = settings.get("gmail_user")
+    password = settings.get("gmail_app_password")
+    try:
+        msg = MIMEMultipart()
+        msg["Subject"] = subject
+        msg["From"] = user
+        msg["To"] = to_email
+        msg.attach(MIMEText(body))
+        part = MIMEApplication(attachment_bytes, _subtype=mime.split("/")[-1])
+        part.add_header("Content-Disposition", "attachment", filename=filename)
+        msg.attach(part)
         ctx = ssl.create_default_context()
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=20) as s:
             s.login(user, password)

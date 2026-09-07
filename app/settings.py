@@ -63,6 +63,17 @@ FIELDS = {
         "Support email", "Shown to clients if a payment fails."),
     "support_phone": ("SUPPORT_PHONE", False,
         "Support phone / WhatsApp", "Shown to clients if a payment fails."),
+    # --- tax / invoicing ------------------------------------------------
+    "business_address": ("BUSINESS_ADDRESS", False,
+        "Registered business address", "Printed on the invoice letterhead."),
+    "gstin": ("GSTIN", False,
+        "GSTIN", "Leave blank until you have it - invoices show no GST line without it, "
+                  "since you can't charge a tax you aren't registered for. Once set, every "
+                  "invoice from then on shows the GST breakup automatically."),
+    "gst_rate_percent": ("GST_RATE_PERCENT", False,
+        "GST rate (%)", "Applied only if GSTIN above is set. Default 18 if left blank. "
+                         "Plan prices are treated as GST-inclusive - this backs the tax out "
+                         "of the amount actually charged, it does not add anything on top."),
 }
 
 GROUPS = [
@@ -71,7 +82,8 @@ GROUPS = [
                   "twilio_account_sid", "twilio_auth_token", "twilio_whatsapp_from"]),
     ("Email", ["resend_api_key", "resend_from_email", "gmail_user", "gmail_app_password"]),
     ("AI providers", ["anthropic_api_key", "gemini_api_key", "openai_api_key"]),
-    ("Business details", ["business_name", "support_email", "support_phone"]),
+    ("Business details", ["business_name", "support_email", "support_phone", "business_address"]),
+    ("Tax & invoicing", ["gstin", "gst_rate_percent"]),
 ]
 
 ENC_PREFIX = "enc:v1:"
@@ -263,6 +275,26 @@ def support_email():
 
 def support_phone():
     return get("support_phone")
+
+
+def business_address():
+    return get("business_address")
+
+
+def gstin():
+    return get("gstin")
+
+
+def gst_rate_percent():
+    """A float, never raises. Only meaningful when gstin() is set - callers
+    must check that themselves, this just answers "what rate" if they do."""
+    raw = get("gst_rate_percent")
+    if not raw:
+        return 18.0
+    try:
+        return float(raw)
+    except ValueError:
+        return 18.0
 
 
 def whatsapp_ready():

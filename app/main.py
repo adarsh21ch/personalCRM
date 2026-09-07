@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Plai
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-import store, settings, auth, rzp, notify
+import store, settings, auth, rzp, notify, invoice
 
 app = FastAPI(title="Personal CRM", docs_url=None, redoc_url=None)
 # check_dir=False: StaticFiles raises at construction time if the directory is
@@ -511,6 +511,30 @@ STATUS_MAP = {
 }
 
 
+def _send_payment_receipt(client, plan, payment):
+    """WhatsApp gets a short text notification; email gets the actual PDF
+    invoice attached, since WhatsApp text can't carry a document here. Both
+    are attempted independently - one failing must not skip the other, and
+    neither failing may break webhook processing, so every step is guarded."""
+    amount_str = rupees(payment["amount_paise"])
+    try:
+        notify.send_whatsapp(client["phone"],
+            notify.payment_receipt_message(client["name"], settings.business_name(), plan["name"], amount_str))
+    except Exception as exc:
+        print("payment receipt: whatsapp send failed: %s" % exc)
+
+    try:
+        pdf = invoice.build_invoice_pdf(payment, client, plan)
+        inv_no = invoice.invoice_number(payment)
+        subject = "Payment received — Invoice %s" % inv_no
+        body = ("Hi %s,\n\nThis confirms your payment of ₹%s for the %s plan with %s. "
+               "Your invoice is attached.\n\nThank you." % (
+                   client["name"], amount_str, plan["name"], settings.business_name()))
+        notify.send_email_with_attachment(client["email"], subject, body, pdf, "%s.pdf" % inv_no)
+    except Exception as exc:
+        print("payment receipt: invoice email failed: %s" % exc)
+
+
 def _handle_subscription_event(kind, rzp_sub, rzp_payment=None):
     sub = _row_for_rzp_sub(rzp_sub)
     if not sub:
@@ -536,17 +560,11 @@ def _handle_subscription_event(kind, rzp_sub, rzp_payment=None):
         # Idempotent: the unique index on payments.rzp_payment_id would raise on
         # a Razorpay retry-delivery of the same webhook, so check first.
         if not store.get_by("payments", "rzp_payment_id", rzp_payment["id"]):
-            store.insert("payments", {
+            payment = store.insert("payments", {
                 "subscription_id": sub["id"], "rzp_payment_id": rzp_payment["id"],
                 "amount_paise": rzp_payment.get("amount", plan["amount_paise"]),
                 "status": "captured", "method": rzp_payment.get("method", ""), "notes": ""})
-            ok, _ = notify.send_whatsapp(client["phone"],
-                notify.payment_receipt_message(client["name"], settings.business_name(),
-                                               plan["name"], rupees(rzp_payment.get("amount", plan["amount_paise"]))))
-            if not ok:
-                notify.send_email(client["email"], "Payment received",
-                                  notify.payment_receipt_message(client["name"], settings.business_name(),
-                                                                 plan["name"], rupees(rzp_payment.get("amount", plan["amount_paise"]))))
+            _send_payment_receipt(client, plan, payment)
 
     if kind == "subscription.halted":
         msg = notify.payment_failed_message(client["name"], settings.business_name(), plan["name"],
