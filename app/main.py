@@ -609,10 +609,30 @@ def legal_contact(request: Request):
     return T.TemplateResponse("legal-contact.html", legal_ctx(request))
 
 
-# --------------------------------------------------------------- misc
+# --------------------------------------------------------------- homepage
+def _wa_link():
+    """A wa.me link from the configured support phone, or a mailto: fallback,
+    or a link to /contact if neither is set - the CTA must always go
+    somewhere, never a dead '#'."""
+    phone = settings.support_phone()
+    if phone:
+        digits = "".join(ch for ch in phone if ch.isdigit())
+        return "https://wa.me/%s?text=%s" % (
+            digits, "Hi%2C%20I%27d%20like%20to%20talk%20about%20building%20something.")
+    if settings.support_email():
+        return "mailto:%s" % settings.support_email()
+    return "/contact"
+
+
 @app.get("/", response_class=HTMLResponse)
-def root():
-    return RedirectResponse("/admin", status_code=303)
+def home(request: Request):
+    try:
+        plans = [p for p in store.list_rows("plans", order="amount_paise.asc", limit=20) if p["active"]]
+    except Exception:
+        plans = []  # the homepage must render even if the database is unreachable
+    return T.TemplateResponse("home.html", dict(
+        request=request, business=settings.business_name(), support_email=settings.support_email(),
+        wa_link=_wa_link(), plans=plans, year=datetime.utcnow().year))
 
 
 @app.get("/healthz")
