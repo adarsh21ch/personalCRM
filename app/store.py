@@ -238,8 +238,15 @@ def settings_delete(key):
 
 # ------------------------------------------------------------------ dashboard
 def dashboard_stats():
-    subs = list_rows("subscriptions", limit=10000)
-    clients = list_rows("clients", limit=10000)
+    """Never raises. A database hiccup should degrade the dashboard to zeros
+    with a note, not crash the one page every session starts on."""
+    try:
+        subs = list_rows("subscriptions", limit=10000)
+        clients = list_rows("clients", limit=10000)
+        products = list_rows("products", limit=10000)
+    except Exception as exc:
+        return {"clients": 0, "products": 0, "subscriptions": 0, "by_status": {},
+                "mrr_paise": 0, "error": "%s: %s" % (type(exc).__name__, exc)}
     by_status = {}
     mrr_paise = 0
     for s in subs:
@@ -248,10 +255,11 @@ def dashboard_stats():
             mrr_paise += s["amount_paise"]
     return {
         "clients": len(clients),
-        "products": len(list_rows("products", limit=10000)),
+        "products": len(products),
         "subscriptions": len(subs),
         "by_status": by_status,
         "mrr_paise": mrr_paise,
+        "error": None,
     }
 
 

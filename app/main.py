@@ -108,6 +108,31 @@ async def _redirect_to_login(request: Request, exc: HTTPException):
     return PlainTextResponse(str(exc.detail), status_code=exc.status_code)
 
 
+@app.exception_handler(Exception)
+async def _unhandled(request: Request, exc: Exception):
+    """The backstop. Without this, any bug we haven't specifically guarded
+    against (like the dashboard's database calls before this fix) shows an
+    unreadable blank "Internal Server Error" with no way to diagnose it short
+    of digging through platform logs. Always logged in full either way; on
+    the operator-only surfaces (/admin*, /healthz) the message itself is also
+    shown in the response, since nobody but the operator ever sees those and
+    seeing the real error immediately beats a round trip through Vercel's log
+    viewer. Public, client-facing pages (/subscribe, /webhook) keep a generic
+    message - a stranger has no business seeing our stack traces."""
+    import traceback
+    print("UNHANDLED %s %s -> %s: %s\n%s" % (
+        request.method, request.url.path, type(exc).__name__, exc, traceback.format_exc()))
+    path = request.url.path
+    if path.startswith("/admin") or path == "/healthz":
+        return PlainTextResponse(
+            "Something broke loading this page: %s: %s\n\n"
+            "This has been logged. If it keeps happening after a reload, check "
+            "/healthz and the Razorpay/Supabase settings." % (type(exc).__name__, exc),
+            status_code=500)
+    return PlainTextResponse("Something went wrong. Please try again in a moment.",
+                             status_code=500)
+
+
 @app.get("/admin/login", response_class=HTMLResponse)
 def login_form(request: Request):
     if _session_email(request):
@@ -139,14 +164,21 @@ def logout():
 def dashboard(request: Request):
     require_admin(request)
     stats = store.dashboard_stats()
-    clients = store.list_rows("clients", limit=500)
-    subs = store.list_rows("subscriptions", limit=1000)
-    plans_by_id = {p["id"]: p for p in store.list_rows("plans", limit=500)}
-    by_client = {}
-    for s in subs:
-        by_client.setdefault(s["client_id"], []).append(s)
-    for c in clients:
-        c["subs"] = by_client.get(c["id"], [])
+    try:
+        clients = store.list_rows("clients", limit=500)
+        subs = store.list_rows("subscriptions", limit=1000)
+        plans_by_id = {p["id"]: p for p in store.list_rows("plans", limit=500)}
+    except Exception as exc:
+        # Same reasoning as dashboard_stats(): a database hiccup should show
+        # a banner, not take down the page everyone lands on after signing in.
+        clients, plans_by_id = [], {}
+        stats = dict(stats, error=stats.get("error") or "%s: %s" % (type(exc).__name__, exc))
+    else:
+        by_client = {}
+        for s in subs:
+            by_client.setdefault(s["client_id"], []).append(s)
+        for c in clients:
+            c["subs"] = by_client.get(c["id"], [])
     return T.TemplateResponse("dashboard.html", ctx(
         request, stats=stats, clients=clients, plans_by_id=plans_by_id))
 

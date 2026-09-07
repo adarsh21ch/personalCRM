@@ -11,6 +11,11 @@
   <a href="/admin/settings">add your Razorpay keys</a>.</div>
 {% endif %}
 
+{% if stats.error %}
+<div class="error-box">Couldn't load live data from the database ({{ stats.error }}). The numbers below may be
+  stale or zero — try reloading the page in a moment.</div>
+{% endif %}
+
 <div class="stat-grid">
   <div class="stat-card"><div class="n">{{ stats.clients }}</div><div class="l">Clients</div></div>
   <div class="stat-card"><div class="n">{{ stats.products }}</div><div class="l">Products / websites</div></div>
