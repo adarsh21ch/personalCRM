@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Add client{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Add a client</h1></div>
+<div class="card" style="max-width:520px;">
+  <form method="post" action="/admin/clients">
+    <label for="name">Client name *</label>
+    <input type="text" id="name" name="name" required autofocus>
+    <label for="company">Company / brand</label>
+    <input type="text" id="company" name="company">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email">
+    <label for="phone">Phone (with country code, for WhatsApp)</label>
+    <input type="tel" id="phone" name="phone" placeholder="+91...">
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes"></textarea>
+    <h2 style="margin-top:22px;">Product / website (optional, can add later)</h2>
+    <label for="product_name">Product name</label>
+    <input type="text" id="product_name" name="product_name" placeholder="e.g. Their booking website">
+    <label for="product_url">URL</label>
+    <input type="text" id="product_url" name="product_url" placeholder="https://...">
+    <div style="margin-top:20px;"><button type="submit">Add client</button></div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Dashboard</h1><p class="muted">Every client, every subscription, in one place.</p></div>
+  <a class="btn" href="/admin/clients/new">+ Add client</a>
+</div>
+
+{% if not rzp_ready %}
+<div class="error-box">Razorpay isn't fully configured yet, so subscription links won't work until you
+  <a href="/admin/settings">add your Razorpay keys</a>.</div>
+{% endif %}
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="n">{{ stats.clients }}</div><div class="l">Clients</div></div>
+  <div class="stat-card"><div class="n">{{ stats.products }}</div><div class="l">Products / websites</div></div>
+  <div class="stat-card"><div class="n">{{ stats.by_status.get('active', 0) }}</div><div class="l">Active subscriptions</div></div>
+  <div class="stat-card"><div class="n">₹{{ stats.mrr_paise | rupees }}</div><div class="l">Monthly recurring revenue</div></div>
+</div>
+
+<h2>Clients</h2>
+{% if clients %}
+<table>
+  <tr><th>Client</th><th>Company</th><th>Products</th><th>Subscription</th><th>Amount</th><th>Status</th></tr>
+  {% for c in clients %}
+  <tr onclick="location.href='/admin/clients/{{ c.id }}'" style="cursor:pointer">
+    <td><strong>{{ c.name }}</strong><br><span class="muted">{{ c.email or c.phone or '' }}</span></td>
+    <td>{{ c.company or '—' }}</td>
+    <td>{{ c.subs | length if c.subs else 0 }}</td>
+    {% if c.subs %}
+      {% set s = c.subs[0] %}
+      <td>{{ plans_by_id.get(s.plan_id, {}).get('name', '—') }}</td>
+      <td>₹{{ s.amount_paise | rupees }}/mo</td>
+      <td><span class="badge {{ status_group(s.status) }}">{{ status_label(s.status) }}</span></td>
+    {% else %}
+      <td class="muted">No subscription</td><td>—</td><td><span class="badge cancelled">Not onboarded</span></td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="card muted">No clients yet. <a href="/admin/clients/new">Add your first one.</a></div>
+{% endif %}
+{% endblock %}

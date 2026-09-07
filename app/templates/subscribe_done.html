@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thank you — {{ business }}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="wrap">
+<div class="center-page">
+  <div class="card">
+    <h1>Thank you{{ ', ' + client.name if client else '' }}!</h1>
+    <p class="muted">Your subscription is set up. You'll get a confirmation once the first payment clears —
+      usually within a few minutes.</p>
+    <a class="btn" href="/" style="margin-top:10px;">Done</a>
+  </div>
+</div>
+</main>
+</body>
+</html>

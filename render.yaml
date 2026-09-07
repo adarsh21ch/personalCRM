@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: personal-crm
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      # --- data: unset both -> local SQLite (fine for one operator; add a Render
+      # disk if you want the SQLite file to survive deploys). Set both -> Supabase.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # --- who can sign in to /admin. All three required.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      # --- encrypts every secret entered at /admin/settings. Falls back to
+      # ADMIN_SECRET if unset; set it separately so rotating the admin password
+      # doesn't also lock you out of your own stored API keys.
+      - key: SETTINGS_KEY
+        sync: false
+      # Everything else - Razorpay, WhatsApp, email, AI keys - is entered from
+      # /admin/settings after first deploy. Nothing else has to be set here.

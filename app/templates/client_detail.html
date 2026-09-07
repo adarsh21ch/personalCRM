@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ client.name }}</h1><p class="muted">{{ client.company or '' }}</p></div>
+  <a class="btn secondary" href="/admin">&larr; Dashboard</a>
+</div>
+
+{% if link_url %}
+<div class="ok-box">
+  Onboarding link ready{% if sent == '1' %} — sent{% elif sent == '0' %} — could not send automatically, share it manually{% endif %}:
+  <div class="link-box">
+    <span style="flex:1">{{ link_url }}</span>
+  </div>
+  <form method="post" action="/admin/clients/{{ client.id }}/send-link" class="row" style="margin-top:10px;">
+    <input type="hidden" name="token" value="{{ link_url.split('/')[-1] }}">
+    <button type="submit" name="channel" value="whatsapp" class="btn secondary">Send via WhatsApp</button>
+    <button type="submit" name="channel" value="email" class="btn secondary">Send via email</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2 style="margin-top:0">Contact</h2>
+  <form method="post" action="/admin/clients/{{ client.id }}/edit">
+    <div class="row">
+      <div style="flex:1;min-width:200px;"><label>Name</label><input type="text" name="name" value="{{ client.name }}" required></div>
+      <div style="flex:1;min-width:200px;"><label>Company</label><input type="text" name="company" value="{{ client.company or '' }}"></div>
+    </div>
+    <div class="row">
+      <div style="flex:1;min-width:200px;"><label>Email</label><input type="email" name="email" value="{{ client.email or '' }}"></div>
+      <div style="flex:1;min-width:200px;"><label>Phone</label><input type="tel" name="phone" value="{{ client.phone or '' }}"></div>
+    </div>
+    <label>Notes</label>
+    <textarea name="notes">{{ client.notes or '' }}</textarea>
+    <label>Relationship status</label>
+    <select name="status">
+      <option value="active" {{ 'selected' if client.status == 'active' }}>Active</option>
+      <option value="pending" {{ 'selected' if client.status == 'pending' }}>Pending</option>
+      <option value="inactive" {{ 'selected' if client.status == 'inactive' }}>Inactive / left</option>
+    </select>
+    <div style="margin-top:14px;"><button type="submit">Save</button></div>
+  </form>
+</div>
+
+<h2>Products / websites</h2>
+<div class="card">
+  {% if products %}
+  <table class="plain" style="margin-bottom:16px;">
+    <tr><th>Name</th><th>URL</th></tr>
+    {% for p in products %}<tr><td>{{ p.name }}</td><td>{% if p.url %}<a href="{{ p.url }}" target="_blank">{{ p.url }}</a>{% else %}—{% endif %}</td></tr>{% endfor %}
+  </table>
+  {% else %}<p class="muted">No products added yet.</p>{% endif %}
+  <form method="post" action="/admin/clients/{{ client.id }}/products" class="row">
+    <input type="text" name="name" placeholder="Product name" required style="flex:1;">
+    <input type="text" name="url" placeholder="https://..." style="flex:1;">
+    <button type="submit" class="btn secondary">Add product</button>
+  </form>
+</div>
+
+<h2>Subscriptions</h2>
+<div class="card">
+  {% if subs %}
+  <table class="plain" style="margin-bottom:16px;">
+    <tr><th>Plan</th><th>Amount</th><th>Status</th><th>Next billing</th><th></th></tr>
+    {% for s in subs %}
+    <tr>
+      <td>{{ plans_by_id.get(s.plan_id, {}).get('name', s.plan_id) }}</td>
+      <td>₹{{ s.amount_paise | rupees }}/mo</td>
+      <td><span class="badge {{ status_group(s.status) }}">{{ status_label(s.status) }}</span></td>
+      <td>{{ s.next_billing_at[:10] if s.next_billing_at else '—' }}</td>
+      <td>
+        {% if s.status not in ('cancelled', 'completed', 'expired') %}
+        <form method="post" action="/admin/subscriptions/{{ s.id }}/cancel" class="inline-form"
+              onsubmit="return confirm('Cancel this subscription?')">
+          <button type="submit" class="btn danger" style="padding:4px 10px;font-size:12px;">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No subscription yet — generate a link below.</p>{% endif %}
+
+  <form method="post" action="/admin/clients/{{ client.id }}/link" class="row">
+    <select name="plan_id" required style="flex:1;">
+      {% for p in plans %}<option value="{{ p.id }}">{{ p.name }} — ₹{{ p.amount_paise | rupees }}/mo</option>{% endfor %}
+    </select>
+    <select name="product_id" style="flex:1;">
+      <option value="">(no specific product)</option>
+      {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+    </select>
+    <button type="submit">Generate onboarding link</button>
+  </form>
+</div>
+
+<h2>Payment history</h2>
+<div class="card">
+  {% if payments %}
+  <table class="plain">
+    <tr><th>Date</th><th>Amount</th><th>Status</th><th>Method</th></tr>
+    {% for p in payments %}
+    <tr>
+      <td>{{ p.created_at[:16].replace('T', ' ') }}</td>
+      <td>₹{{ p.amount_paise | rupees }}</td>
+      <td><span class="badge {{ 'active' if p.status == 'captured' else 'declined' }}">{{ p.status }}</span></td>
+      <td>{{ p.method or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No payments recorded yet.</p>{% endif %}
+</div>
+{% endblock %}

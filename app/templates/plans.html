@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Plans{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Plans</h1><p class="muted">The tiers clients subscribe to. Editing the price here does not change what an existing subscriber already pays.</p></div>
+
+<table style="margin-bottom:22px;">
+  <tr><th>Name</th><th>Amount / month</th><th>Razorpay plan</th><th>Status</th><th></th></tr>
+  {% for p in plans %}
+  <tr>
+    <td>{{ p.name }}</td>
+    <td>₹{{ p.amount_paise | rupees }}</td>
+    <td class="muted">{{ p.rzp_plan_id or 'created on first use' }}</td>
+    <td><span class="badge {{ 'active' if p.active else 'cancelled' }}">{{ 'Active' if p.active else 'Disabled' }}</span></td>
+    <td>
+      <form method="post" action="/admin/plans/{{ p.id }}/toggle" class="inline-form">
+        <button type="submit" class="btn secondary" style="padding:4px 10px;font-size:12px;">{{ 'Disable' if p.active else 'Enable' }}</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Add a plan</h2>
+<div class="card" style="max-width:420px;">
+  <form method="post" action="/admin/plans">
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" required placeholder="e.g. Enterprise">
+    <label for="amount_rupees">Amount (₹ / month)</label>
+    <input type="number" id="amount_rupees" name="amount_rupees" required min="1">
+    <div style="margin-top:16px;"><button type="submit">Add plan</button></div>
+  </form>
+</div>
+{% endblock %}

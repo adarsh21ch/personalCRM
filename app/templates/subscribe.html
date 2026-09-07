@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subscribe — {{ business }}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="wrap">
+<div class="center-page">
+  <div class="card" style="text-align:left;">
+    <h1 style="text-align:center;">{{ business }}</h1>
+    <p class="muted" style="text-align:center;">Hi {{ client.name }}, you're setting up:</p>
+    <div class="stat-card" style="text-align:center;margin:16px 0;">
+      <div class="n">{{ plan.name }}</div>
+      <div class="l">₹{{ plan.amount_paise | rupees }} / month, billed automatically via Razorpay</div>
+    </div>
+    <div id="error" class="error-box" style="display:none;"></div>
+    <button id="pay-btn" style="width:100%;">Set up automatic payment</button>
+    <p class="hint muted" style="text-align:center;margin-top:14px;">
+      You'll authorize a recurring monthly charge with Razorpay. You can cancel anytime — just contact us.
+    </p>
+  </div>
+</div>
+</main>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+document.getElementById('pay-btn').addEventListener('click', async function () {
+  var btn = this, errBox = document.getElementById('error');
+  errBox.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Preparing checkout…';
+  try {
+    var res = await fetch('/subscribe/{{ token }}/start', { method: 'POST' });
+    var data = await res.json();
+    if (!res.ok) { throw new Error(data.detail || 'Could not start checkout.'); }
+    var rzp = new Razorpay({
+      key: data.key_id,
+      subscription_id: data.subscription_id,
+      name: data.name,
+      description: data.plan_name + ' — monthly subscription',
+      theme: { color: '#4f46e5' },
+      prefill: data.prefill,
+      handler: function (response) {
+        window.location.href = '/subscribe/{{ token }}/done';
+      },
+      modal: {
+        ondismiss: function () {
+          btn.disabled = false; btn.textContent = 'Set up automatic payment';
+        }
+      }
+    });
+    rzp.on('payment.failed', function (resp) {
+      errBox.textContent = 'Payment did not go through: ' + (resp.error && resp.error.description || 'please try again.');
+      errBox.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Set up automatic payment';
+    });
+    rzp.open();
+    btn.disabled = false; btn.textContent = 'Set up automatic payment';
+  } catch (e) {
+    errBox.textContent = e.message;
+    errBox.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Set up automatic payment';
+  }
+});
+</script>
+</body>
+</html>

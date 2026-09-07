@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Settings</h1><p class="muted">Every credential this app uses. Stored encrypted, never shown back in full.</p></div>
+
+{% if problem %}<div class="error-box">{{ problem }}</div>{% endif %}
+{% if enc_problem %}<div class="error-box">{{ enc_problem }}</div>{% endif %}
+{% if saved %}<div class="ok-box">Saved.</div>{% endif %}
+{% if tested == 'ok' %}<div class="ok-box">Razorpay connection works.</div>{% endif %}
+{% if tested == 'fail' %}<div class="error-box">Razorpay connection failed — check the keys below.</div>{% endif %}
+
+{% for group_name, keys in groups %}
+<div class="card settings-group">
+  <h2 style="margin-top:0;">{{ group_name }}</h2>
+  {% for key in keys %}
+  {% set r = rows[key] %}
+  <div class="settings-row">
+    <div class="meta">
+      <div class="label">{{ r.label }}
+        {% if r.source %}<span class="source-tag {{ r.source }}">{{ r.source }}</span>{% endif %}
+      </div>
+      <div class="hint muted">{{ r.hint | safe }}</div>
+    </div>
+    <div class="val">
+      <form method="post" action="/admin/settings/save" class="row">
+        <input type="hidden" name="key" value="{{ key }}">
+        <input type="{{ 'password' if r.secret else 'text' }}" name="value"
+               placeholder="{{ r.shown if r.set else 'not set' }}" style="flex:1;min-width:220px;">
+        <button type="submit" class="btn secondary">Save</button>
+      </form>
+      {% if r.set %}
+      <form method="post" action="/admin/settings/clear" class="inline-form" style="margin-top:6px;">
+        <input type="hidden" name="key" value="{{ key }}">
+        <button type="submit" class="btn secondary" style="font-size:12px;padding:4px 10px;">Clear</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% if group_name.startswith('Razorpay') %}
+  <form method="post" action="/admin/settings/test-razorpay" style="margin-top:10px;">
+    <button type="submit" class="btn secondary">Test Razorpay connection</button>
+  </form>
+  <p class="hint muted" style="margin-top:10px;">Webhook URL to paste into Razorpay Dashboard → Settings → Webhooks:
+    <code>{{ request.base_url }}webhook/razorpay</code> — events: subscription.authenticated, subscription.activated,
+    subscription.charged, subscription.pending, subscription.halted, subscription.cancelled, subscription.completed, payment.failed.</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

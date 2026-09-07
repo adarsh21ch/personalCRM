@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Personal CRM{% endblock %} — {{ business }}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if request.cookies.get('crm_admin') %}
+<header class="topbar">
+  <a class="brand" href="/admin">{{ business }}</a>
+  <nav>
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/clients/new">Add client</a>
+    <a href="/admin/plans">Plans</a>
+    <a href="/admin/settings">Settings</a>
+  </nav>
+  <form method="post" action="/admin/logout" class="logout"><button type="submit">Sign out</button></form>
+</header>
+{% endif %}
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>
