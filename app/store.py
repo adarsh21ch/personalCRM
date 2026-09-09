@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS {p}onboard_tokens (
 CREATE TABLE IF NOT EXISTS {p}app_settings (
   key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS {p}showcase (
+  id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
+  name TEXT NOT NULL, url TEXT NOT NULL, description TEXT,
+  active INTEGER NOT NULL DEFAULT 1
+);
 CREATE INDEX IF NOT EXISTS idx_{p}products_client ON {p}products(client_id);
 CREATE INDEX IF NOT EXISTS idx_{p}subs_client ON {p}subscriptions(client_id);
 CREATE INDEX IF NOT EXISTS idx_{p}payments_sub ON {p}payments(subscription_id);
@@ -84,7 +89,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_{p}payments_rzp ON {p}payments(rzp_payment
   WHERE rzp_payment_id IS NOT NULL;
 """
 
-TABLES = ("clients", "products", "plans", "subscriptions", "payments", "onboard_tokens")
+TABLES = ("clients", "products", "plans", "subscriptions", "payments", "onboard_tokens", "showcase")
 
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS never
 # touches an existing table, so SQLite needs these applied by hand; Supabase

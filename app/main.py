@@ -104,6 +104,8 @@ def _nav_section(path):
         return "add"
     if path.startswith("/admin/plans"):
         return "plans"
+    if path.startswith("/admin/showcase"):
+        return "showcase"
     if path.startswith("/admin/settings"):
         return "settings"
     if path.startswith("/admin"):
@@ -577,6 +579,55 @@ def plan_delete(request: Request, plan_id: str):
     return RedirectResponse("/admin/plans", status_code=303)
 
 
+# ----------------------------------------------------------------- showcase
+@app.get("/admin/showcase", response_class=HTMLResponse)
+def showcase_list(request: Request):
+    require_admin(request)
+    try:
+        items = store.list_rows("showcase", order="created_at.desc", limit=200)
+        problem = None
+    except Exception as exc:
+        items = []
+        problem = "%s: %s" % (type(exc).__name__, exc)
+    return T.TemplateResponse("showcase.html", ctx(request, items=items, problem=problem))
+
+
+@app.post("/admin/showcase")
+def showcase_create(request: Request, name: str = Form(...), url: str = Form(...),
+                    description: str = Form("")):
+    require_admin(request)
+    store.insert("showcase", {"name": name.strip(), "url": url.strip(),
+                              "description": description.strip(), "active": 1})
+    return RedirectResponse("/admin/showcase", status_code=303)
+
+
+@app.post("/admin/showcase/{item_id}/edit")
+def showcase_edit(request: Request, item_id: str, name: str = Form(...), url: str = Form(...),
+                  description: str = Form("")):
+    require_admin(request)
+    if not store.get("showcase", item_id):
+        raise HTTPException(404, "No such showcase entry.")
+    store.patch("showcase", item_id, {"name": name.strip(), "url": url.strip(),
+                                      "description": description.strip()})
+    return RedirectResponse("/admin/showcase", status_code=303)
+
+
+@app.post("/admin/showcase/{item_id}/toggle")
+def showcase_toggle(request: Request, item_id: str):
+    require_admin(request)
+    item = store.get("showcase", item_id)
+    if item:
+        store.patch("showcase", item_id, {"active": 0 if item["active"] else 1})
+    return RedirectResponse("/admin/showcase", status_code=303)
+
+
+@app.post("/admin/showcase/{item_id}/delete")
+def showcase_delete(request: Request, item_id: str):
+    require_admin(request)
+    store.delete("showcase", item_id)
+    return RedirectResponse("/admin/showcase", status_code=303)
+
+
 # ------------------------------------------------------------------ settings
 @app.get("/admin/settings", response_class=HTMLResponse)
 def settings_page(request: Request, saved: str = None, tested: str = None):
@@ -962,9 +1013,15 @@ def home(request: Request):
                  if p["active"] and not p.get("client_id")]
     except Exception:
         plans = []  # the homepage must render even if the database is unreachable
+    try:
+        showcase = [s for s in store.list_rows("showcase", order="created_at.desc", limit=50)
+                    if s["active"]]
+    except Exception:
+        showcase = []  # degrades to no "our work" section until 0003_showcase.sql is run
     return T.TemplateResponse("home.html", dict(
         request=request, business=settings.business_name(), support_email=settings.support_email(),
-        wa_link=_wa_link(), plans=plans, plan_groups=_plan_groups(plans), year=datetime.utcnow().year))
+        wa_link=_wa_link(), plans=plans, plan_groups=_plan_groups(plans), showcase=showcase,
+        year=datetime.utcnow().year))
 
 
 @app.get("/healthz")

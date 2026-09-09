@@ -82,6 +82,11 @@
   .feat h3 { font-size: 16px; margin: 0 0 8px; }
   .feat p { color: var(--sub); font-size: 14px; margin: 0; }
 
+  .work-card { display: block; text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
+  .work-card:hover { border-color: var(--ink); transform: translateY(-2px); text-decoration: none; }
+  .work-card p { margin-bottom: 14px; }
+  .work-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink); }
+
   .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 860px; margin: 0 auto; }
   .compare .col { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 26px; }
   .compare .col.win { border-color: var(--ink); }
@@ -203,6 +208,28 @@
     </div>
   </div>
 </section>
+
+{% if showcase %}
+<section id="our-work">
+  <div class="wrap">
+    <h2>See it in action</h2>
+    <p class="section-lede">Real projects, live right now — click through and look around.</p>
+    <div class="grid3">
+      {% for s in showcase %}
+      <a class="feat work-card" href="{{ s.url }}" target="_blank" rel="noopener">
+        <h3>{{ s.name }}</h3>
+        {% if s.description %}<p>{{ s.description }}</p>{% endif %}
+        <span class="work-link">Visit site
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M6.5 3.5h6v6M12.3 3.7 3.7 12.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <section>
   <div class="wrap">
