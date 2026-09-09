@@ -506,7 +506,22 @@ def plans_list(request: Request):
     # client's page, not to the shared price list.
     plans = [p for p in store.list_rows("plans", order="amount_paise.asc")
              if not p.get("client_id")]
-    return T.TemplateResponse("plans.html", ctx(request, plans=plans))
+    # A plan that has ever been subscribed to (even a cancelled test sub)
+    # can't be hard-deleted - historical payments and invoices still show
+    # its name via plans_by_id lookups, so removing the row would blank
+    # those out. Disable is always safe; delete only offered when neither
+    # a subscription nor a still-outstanding invite link points at it.
+    subs, tokens = store.fetch_many([
+        dict(table="subscriptions", limit=2000),
+        dict(table="onboard_tokens", limit=2000),
+    ])
+    used_ids = {s["plan_id"] for s in subs} | {t["plan_id"] for t in tokens}
+    for p in plans:
+        p["deletable"] = p["id"] not in used_ids
+    active_plans = [p for p in plans if p["active"]]
+    disabled_plans = [p for p in plans if not p["active"]]
+    return T.TemplateResponse("plans.html", ctx(
+        request, active_plans=active_plans, disabled_plans=disabled_plans))
 
 
 @app.post("/admin/plans")
@@ -517,12 +532,47 @@ def plan_create(request: Request, name: str = Form(...), amount_rupees: int = Fo
     return RedirectResponse("/admin/plans", status_code=303)
 
 
+@app.post("/admin/plans/{plan_id}/edit")
+def plan_edit(request: Request, plan_id: str, name: str = Form(...), amount_rupees: int = Form(...)):
+    require_admin(request)
+    plan = store.get("plans", plan_id)
+    if not plan:
+        raise HTTPException(404, "No such plan.")
+    fields = {"name": name.strip()}
+    new_paise = int(amount_rupees) * 100
+    if new_paise != plan["amount_paise"]:
+        fields["amount_paise"] = new_paise
+        # Razorpay plans are immutable once created - see _ensure_plan_synced.
+        # Clearing this makes the next checkout mint a fresh Razorpay plan at
+        # the new price instead of silently reusing the old one. Anyone
+        # already subscribed keeps their own already-created mandate/price;
+        # this only changes what a NEW subscriber on this plan pays.
+        fields["rzp_plan_id"] = None
+    store.patch("plans", plan_id, fields)
+    return RedirectResponse("/admin/plans", status_code=303)
+
+
 @app.post("/admin/plans/{plan_id}/toggle")
 def plan_toggle(request: Request, plan_id: str):
     require_admin(request)
     plan = store.get("plans", plan_id)
     if plan:
         store.patch("plans", plan_id, {"active": 0 if plan["active"] else 1})
+    return RedirectResponse("/admin/plans", status_code=303)
+
+
+@app.post("/admin/plans/{plan_id}/delete")
+def plan_delete(request: Request, plan_id: str):
+    require_admin(request)
+    plan = store.get("plans", plan_id)
+    if not plan:
+        raise HTTPException(404, "No such plan.")
+    used = (store.list_rows("subscriptions", where={"plan_id": plan_id}, limit=1)
+            or store.list_rows("onboard_tokens", where={"plan_id": plan_id}, limit=1))
+    if used:
+        raise HTTPException(400, "This plan has subscribers or an outstanding invite link - "
+                                  "disable it instead of deleting.")
+    store.delete("plans", plan_id)
     return RedirectResponse("/admin/plans", status_code=303)
 
 

@@ -1,24 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Plans{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Plans</h1><p class="muted">The tiers clients subscribe to. Editing the price here does not change what an existing subscriber already pays.</p></div>
+<div class="page-head"><h1>Plans</h1><p class="muted">The tiers clients subscribe to. Changing a plan's price here only
+  affects new subscribers from that point on — anyone already on it keeps paying what they signed up for.</p></div>
+
+{% macro plan_row(p) %}
+<tr>
+  <td><input type="text" name="name" form="edit-{{ p.id }}" value="{{ p.name }}" required
+             style="min-width:140px;padding:6px 9px;"></td>
+  <td>
+    <span class="muted">₹</span>
+    <input type="number" name="amount_rupees" form="edit-{{ p.id }}" value="{{ (p.amount_paise // 100) }}"
+           min="1" required style="width:90px;display:inline-block;padding:6px 9px;">
+  </td>
+  <td class="muted">{{ p.rzp_plan_id or 'created on first use' }}</td>
+  <td><span class="badge {{ 'active' if p.active else 'cancelled' }}">{{ 'Active' if p.active else 'Disabled' }}</span></td>
+  <td>
+    <div class="row" style="gap:6px;flex-wrap:nowrap;">
+      <button type="submit" form="edit-{{ p.id }}" class="btn secondary" style="padding:4px 10px;font-size:12px;">Save</button>
+      <button type="submit" form="toggle-{{ p.id }}" class="btn secondary" style="padding:4px 10px;font-size:12px;">
+        {{ 'Disable' if p.active else 'Enable' }}</button>
+      {% if p.deletable %}
+      <button type="submit" form="delete-{{ p.id }}" class="btn danger" style="padding:4px 10px;font-size:12px;">Delete</button>
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{% endmacro %}
+
+{% macro plan_forms(p) %}
+<form id="edit-{{ p.id }}" method="post" action="/admin/plans/{{ p.id }}/edit"></form>
+<form id="toggle-{{ p.id }}" method="post" action="/admin/plans/{{ p.id }}/toggle"></form>
+{% if p.deletable %}
+<form id="delete-{{ p.id }}" method="post" action="/admin/plans/{{ p.id }}/delete"
+      onsubmit="return confirm('Delete {{ p.name }}? This cannot be undone.')"></form>
+{% endif %}
+{% endmacro %}
 
 <table style="margin-bottom:22px;">
   <tr><th>Name</th><th>Amount / month</th><th>Razorpay plan</th><th>Status</th><th></th></tr>
-  {% for p in plans %}
-  <tr>
-    <td>{{ p.name }}</td>
-    <td>₹{{ p.amount_paise | rupees }}</td>
-    <td class="muted">{{ p.rzp_plan_id or 'created on first use' }}</td>
-    <td><span class="badge {{ 'active' if p.active else 'cancelled' }}">{{ 'Active' if p.active else 'Disabled' }}</span></td>
-    <td>
-      <form method="post" action="/admin/plans/{{ p.id }}/toggle" class="inline-form">
-        <button type="submit" class="btn secondary" style="padding:4px 10px;font-size:12px;">{{ 'Disable' if p.active else 'Enable' }}</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
+  {% for p in active_plans %}{{ plan_row(p) }}{% endfor %}
 </table>
+
+{% if disabled_plans %}
+<details style="margin-bottom:30px;">
+  <summary style="cursor:pointer;color:var(--sub);font-size:13.5px;margin-bottom:10px;">
+    {{ disabled_plans | length }} disabled plan{{ 's' if disabled_plans | length > 1 }} — kept out of the way, not gone
+  </summary>
+  <table style="margin-top:10px;">
+    <tr><th>Name</th><th>Amount / month</th><th>Razorpay plan</th><th>Status</th><th></th></tr>
+    {% for p in disabled_plans %}{{ plan_row(p) }}{% endfor %}
+  </table>
+</details>
+{% endif %}
+
+<!-- Hidden action forms, kept outside the tables - a <form> is not valid
+     table content, and the HTML5 form="id" attribute on the inputs/buttons
+     above already associates them without needing to be nested inside. -->
+{% for p in active_plans %}{{ plan_forms(p) }}{% endfor %}
+{% for p in disabled_plans %}{{ plan_forms(p) }}{% endfor %}
 
 <h2>Add a plan</h2>
 <div class="card" style="max-width:420px;">
