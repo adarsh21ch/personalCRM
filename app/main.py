@@ -35,9 +35,10 @@ app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static"), check_d
 T = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 
 DEFAULT_PLANS = [
-    ("Basic", 99900),
-    ("Standard", 199900),
-    ("Premium", 299900),
+    ("Personal", 99900),
+    ("Personal Plus", 119900),
+    ("Business", 399900),
+    ("Business Plus", 499900),
 ]
 
 # Subscription lifecycle, collapsed to the four buckets asked for on the
@@ -938,15 +939,32 @@ def _wa_link():
     return "/contact"
 
 
+def _plan_groups(plans):
+    """Personal/Business columns for the homepage, each with an optional Plus
+    tier - purely by name (no schema column for this), since the admin
+    already names them this way and there are only ever a handful of
+    curated shared plans. First match wins per bucket if there's ever a
+    duplicate; plans is already amount_paise-ascending."""
+    groups = {"personal": None, "personal_plus": None, "business": None, "business_plus": None}
+    for p in plans:
+        name = p["name"].strip().lower()
+        key = ("business" if name.startswith("business") else "personal") + \
+              ("_plus" if name.endswith("plus") else "")
+        if groups.get(key) is None:
+            groups[key] = p
+    return groups
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     try:
-        plans = [p for p in store.list_rows("plans", order="amount_paise.asc", limit=20) if p["active"]]
+        plans = [p for p in store.list_rows("plans", order="amount_paise.asc", limit=20)
+                 if p["active"] and not p.get("client_id")]
     except Exception:
         plans = []  # the homepage must render even if the database is unreachable
     return T.TemplateResponse("home.html", dict(
         request=request, business=settings.business_name(), support_email=settings.support_email(),
-        wa_link=_wa_link(), plans=plans, year=datetime.utcnow().year))
+        wa_link=_wa_link(), plans=plans, plan_groups=_plan_groups(plans), year=datetime.utcnow().year))
 
 
 @app.get("/healthz")
