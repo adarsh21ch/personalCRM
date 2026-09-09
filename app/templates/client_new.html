@@ -1,25 +1,73 @@
 {% extends "base.html" %}
 {% block title %}Add client{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Add a client</h1></div>
-<div class="card" style="max-width:520px;">
+<div class="page-head">
+  <div>
+    <h1>Add a client</h1>
+    <p class="muted">Client, product and onboarding link — all in one go.</p>
+  </div>
+</div>
+
+<div class="card" style="max-width:640px;">
   <form method="post" action="/admin/clients">
-    <label for="name">Client name *</label>
-    <input type="text" id="name" name="name" required autofocus>
-    <label for="company">Company / brand</label>
-    <input type="text" id="company" name="company">
-    <label for="email">Email</label>
-    <input type="email" id="email" name="email">
-    <label for="phone">Phone (with country code, for WhatsApp)</label>
-    <input type="tel" id="phone" name="phone" placeholder="+91...">
+
+    <div class="row">
+      <div style="flex:1;min-width:220px;">
+        <label for="name">Client name *</label>
+        <input type="text" id="name" name="name" required autofocus>
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label for="company">Company / brand</label>
+        <input type="text" id="company" name="company">
+      </div>
+    </div>
+    <div class="row">
+      <div style="flex:1;min-width:220px;">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="where the invoice goes">
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label for="phone">Phone (with country code)</label>
+        <input type="tel" id="phone" name="phone" placeholder="+91…">
+      </div>
+    </div>
     <label for="notes">Notes</label>
-    <textarea id="notes" name="notes"></textarea>
-    <h2 style="margin-top:22px;">Product / website (optional, can add later)</h2>
-    <label for="product_name">Product name</label>
-    <input type="text" id="product_name" name="product_name" placeholder="e.g. Their booking website">
-    <label for="product_url">URL</label>
-    <input type="text" id="product_url" name="product_url" placeholder="https://...">
-    <div style="margin-top:20px;"><button type="submit">Add client</button></div>
+    <textarea id="notes" name="notes" placeholder="Anything worth remembering about this client"></textarea>
+
+    <h2 style="margin-top:26px;">What you built for them</h2>
+    <div class="row">
+      <div style="flex:1;min-width:220px;">
+        <label for="product_name">Product / website</label>
+        <input type="text" id="product_name" name="product_name" placeholder="e.g. Sadhnaastro.com">
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label for="product_url">URL</label>
+        <input type="text" id="product_url" name="product_url" placeholder="https://…">
+      </div>
+    </div>
+
+    <h2 style="margin-top:26px;">Subscription
+      <span class="muted" style="font-weight:400;font-size:13px;">— optional, creates the onboarding link straight away</span>
+    </h2>
+    <div class="row" style="align-items:flex-end;">
+      <div style="flex:1;min-width:220px;">
+        <label for="plan_id">Plan</label>
+        <select id="plan_id" name="plan_id">
+          <option value="">Don't create a link yet</option>
+          {% for p in plans %}
+          <option value="{{ p.id }}">{{ p.name }} — ₹{{ p.amount_paise | rupees }}/mo</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label for="custom_amount">…or a custom amount (₹/month)</label>
+        <input type="number" id="custom_amount" name="custom_amount" min="1" placeholder="e.g. 10">
+      </div>
+    </div>
+    <p class="hint muted">A custom amount creates a plan for this client only — it won't appear in your
+      shared plan list or on your website.</p>
+
+    <div style="margin-top:22px;"><button type="submit">Add client</button></div>
   </form>
 </div>
 {% endblock %}

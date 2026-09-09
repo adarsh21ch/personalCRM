@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS {p}plans (
   id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
   name TEXT NOT NULL, amount_paise INTEGER NOT NULL,
   interval TEXT NOT NULL DEFAULT 'monthly',
-  rzp_plan_id TEXT, active INTEGER NOT NULL DEFAULT 1
+  rzp_plan_id TEXT, active INTEGER NOT NULL DEFAULT 1,
+  client_id TEXT
 );
 CREATE TABLE IF NOT EXISTS {p}subscriptions (
   id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
@@ -84,6 +85,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_{p}payments_rzp ON {p}payments(rzp_payment
 """
 
 TABLES = ("clients", "products", "plans", "subscriptions", "payments", "onboard_tokens")
+
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS never
+# touches an existing table, so SQLite needs these applied by hand; Supabase
+# gets them from supabase/migrations/, and supports() below keeps the app
+# working in the window before that migration is run.
+ADDED_COLUMNS = (("plans", "client_id", "TEXT"),)
 
 
 # ------------------------------------------------------------------ supabase
@@ -118,6 +125,34 @@ def init():
         return
     with _lock, _conn() as c:
         c.executescript(SCHEMA.format(p=TABLE_PREFIX))
+        for table, column, ddl in ADDED_COLUMNS:
+            have = {r["name"] for r in c.execute("PRAGMA table_info(%s)" % _t(table))}
+            if column not in have:
+                c.execute("ALTER TABLE %s ADD COLUMN %s %s" % (_t(table), column, ddl))
+
+
+_caps = {}
+
+
+def supports(table, column):
+    """Whether the live database actually has this column yet.
+
+    SQLite self-migrates in init(), so it always does. Supabase needs its
+    migration run by hand, and this is what stops the gap between "code
+    deployed" and "SQL run" from turning every write into a 400: the caller
+    drops the field and loses the refinement it powers, rather than failing
+    outright. Cached per process - the answer only changes on a deploy or a
+    migration, both of which restart it."""
+    if not USE_SUPABASE:
+        return True
+    key = (table, column)
+    if key not in _caps:
+        try:
+            _sb("GET", "/rest/v1/%s" % _t(table), params={"select": column, "limit": 1})
+            _caps[key] = True
+        except Exception:
+            _caps[key] = False
+    return _caps[key]
 
 
 # ------------------------------------------------------------------ generic rows

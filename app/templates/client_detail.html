@@ -108,31 +108,75 @@
   {% endif %}
 
   <form method="post" action="/admin/clients/{{ client.id }}/link" class="row">
-    <select name="plan_id" required style="flex:1;">
+    <select name="plan_id" required style="flex:1;min-width:180px;">
       {% for p in plans %}<option value="{{ p.id }}">{{ p.name }} — ₹{{ p.amount_paise | rupees }}/mo</option>{% endfor %}
     </select>
-    <select name="product_id" style="flex:1;">
+    <select name="product_id" style="flex:1;min-width:160px;">
       <option value="">(no specific product)</option>
       {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
     </select>
     <button type="submit">{{ 'Generate another link' if pending_links else 'Generate onboarding link' }}</button>
   </form>
+
+  <details style="margin-top:16px;">
+    <summary style="cursor:pointer;font-size:13.5px;color:var(--sub);">
+      Custom amount for {{ client.name }} only
+    </summary>
+    <p class="hint muted" style="margin:10px 0 12px;">
+      A price agreed with this client alone — say ₹10/month. It stays off your shared plan
+      list and off your website, and generates the onboarding link straight away.
+    </p>
+    <form method="post" action="/admin/clients/{{ client.id }}/custom-plan" class="row">
+      <input type="number" name="amount_rupees" min="1" required placeholder="₹ / month"
+             style="flex:0 0 140px;">
+      <input type="text" name="name" placeholder="Label (optional)" style="flex:1;min-width:160px;">
+      <select name="product_id" style="flex:1;min-width:160px;">
+        <option value="">(no specific product)</option>
+        {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn secondary">Create &amp; generate link</button>
+    </form>
+    {% if custom_plans %}
+    <p class="hint muted" style="margin-top:12px;">
+      Existing custom plans for this client:
+      {% for p in custom_plans %}<strong>{{ p.name }}</strong> (₹{{ p.amount_paise | rupees }}/mo){% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+  </details>
 </div>
 
 <h2>Payment history</h2>
 <div class="card">
   {% if payments %}
   <table class="plain">
-    <tr><th>Date</th><th>Amount</th><th>Status</th><th>Method</th></tr>
+    <tr><th>Date</th><th>Amount</th><th>Status</th><th>Method</th><th>Invoice</th></tr>
     {% for p in payments %}
     <tr>
       <td>{{ p.created_at[:16].replace('T', ' ') }}</td>
       <td>₹{{ p.amount_paise | rupees }}</td>
       <td><span class="badge {{ 'active' if p.status == 'captured' else 'declined' }}">{{ p.status }}</span></td>
       <td>{{ p.method or '—' }}</td>
+      <td>
+        {% if p.status == 'captured' %}
+        <a href="/invoice/{{ p.id }}" target="_blank" rel="noopener">Download PDF</a>
+        {% else %}—{% endif %}
+      </td>
     </tr>
     {% endfor %}
   </table>
   {% else %}<p class="muted">No payments recorded yet.</p>{% endif %}
+</div>
+
+<h2>Danger zone</h2>
+<div class="card" style="border-color:var(--bad-bg);">
+  <p class="muted" style="margin-top:0;">
+    Deleting {{ client.name }} removes their products, subscriptions, payment history and
+    invoices from this CRM — permanently. Any live Razorpay subscription is cancelled first,
+    so they stop being charged.
+  </p>
+  <form method="post" action="/admin/clients/{{ client.id }}/delete"
+        onsubmit="return confirm('Delete {{ client.name }} and all their records?\n\nAny active subscription will be cancelled in Razorpay first. This cannot be undone.')">
+    <button type="submit" class="btn danger">Delete this client</button>
+  </form>
 </div>
 {% endblock %}

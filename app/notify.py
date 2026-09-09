@@ -69,26 +69,36 @@ def _whatsapp_twilio(to_phone, message):
 
 
 # ------------------------------------------------------------------ email
-def send_email(to_email, subject, body):
+def send_email(to_email, subject, body, html=None):
     to_email = (to_email or "").strip()
     if not to_email:
         return False, "No email address on file."
     if settings.get("resend_api_key"):
-        return _email_resend(to_email, subject, body)
+        return _email_resend(to_email, subject, body, html)
     if settings.get("gmail_user") and settings.get("gmail_app_password"):
-        return _email_gmail(to_email, subject, body)
+        return _email_gmail(to_email, subject, body, html)
     return False, "No email provider configured."
 
 
-def _email_resend(to_email, subject, body):
+def _from_address():
+    """What the client sees in their inbox. A bare address reads like a
+    machine; 'Nevorai Technologies <billing@...>' reads like a business."""
+    addr = settings.get("resend_from_email") or "onboarding@resend.dev"
+    business = settings.business_name()
+    if business and "<" not in addr:
+        return '%s <%s>' % (business, addr)
+    return addr
+
+
+def _email_resend(to_email, subject, body, html=None):
     api_key = settings.get("resend_api_key")
-    from_addr = settings.get("resend_from_email") or "onboarding@resend.dev"
+    payload = {"from": _from_address(), "to": [to_email], "subject": subject, "text": body}
+    if html:
+        payload["html"] = html
     try:
         with httpx.Client(timeout=20) as c:
             r = c.post("https://api.resend.com/emails",
-                      headers={"Authorization": "Bearer " + api_key},
-                      json={"from": from_addr, "to": [to_email], "subject": subject,
-                            "text": body})
+                      headers={"Authorization": "Bearer " + api_key}, json=payload)
         if r.status_code >= 300:
             return False, "Email send failed: %s" % r.text[:200]
         return True, "sent"
@@ -96,14 +106,29 @@ def _email_resend(to_email, subject, body):
         return False, "Email send failed: %s" % exc
 
 
-def _email_gmail(to_email, subject, body):
+def _gmail_message(user, to_email, subject, body, html=None):
+    """text-only, or a multipart/alternative carrying both halves. The text
+    part goes first: mail clients render the LAST part they understand, so
+    ordering it text-then-html is what makes the HTML win where supported
+    and the text show where it isn't."""
+    business = settings.business_name()
+    if html:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+    else:
+        msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = ('%s <%s>' % (business, user)) if business else user
+    msg["To"] = to_email
+    return msg
+
+
+def _email_gmail(to_email, subject, body, html=None):
     user = settings.get("gmail_user")
     password = settings.get("gmail_app_password")
     try:
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = user
-        msg["To"] = to_email
+        msg = _gmail_message(user, to_email, subject, body, html)
         ctx = ssl.create_default_context()
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=20) as s:
             s.login(user, password)
@@ -114,7 +139,7 @@ def _email_gmail(to_email, subject, body):
 
 
 def send_email_with_attachment(to_email, subject, body, attachment_bytes, attachment_filename,
-                               attachment_mime="application/pdf"):
+                               attachment_mime="application/pdf", html=None):
     """Same provider fallback as send_email(), plus one PDF (or any binary)
     attachment. A separate function rather than an optional param on
     send_email() - most calls need no attachment, and this keeps that path
@@ -124,23 +149,24 @@ def send_email_with_attachment(to_email, subject, body, attachment_bytes, attach
         return False, "No email address on file."
     if settings.get("resend_api_key"):
         return _email_resend_attachment(to_email, subject, body, attachment_bytes,
-                                        attachment_filename, attachment_mime)
+                                        attachment_filename, attachment_mime, html)
     if settings.get("gmail_user") and settings.get("gmail_app_password"):
         return _email_gmail_attachment(to_email, subject, body, attachment_bytes,
-                                       attachment_filename, attachment_mime)
+                                       attachment_filename, attachment_mime, html)
     return False, "No email provider configured."
 
 
-def _email_resend_attachment(to_email, subject, body, attachment_bytes, filename, mime):
+def _email_resend_attachment(to_email, subject, body, attachment_bytes, filename, mime, html=None):
     api_key = settings.get("resend_api_key")
-    from_addr = settings.get("resend_from_email") or "onboarding@resend.dev"
+    payload = {"from": _from_address(), "to": [to_email], "subject": subject, "text": body,
+               "attachments": [{"filename": filename,
+                                "content": base64.b64encode(attachment_bytes).decode("ascii")}]}
+    if html:
+        payload["html"] = html
     try:
         with httpx.Client(timeout=20) as c:
             r = c.post("https://api.resend.com/emails",
-                      headers={"Authorization": "Bearer " + api_key},
-                      json={"from": from_addr, "to": [to_email], "subject": subject, "text": body,
-                            "attachments": [{"filename": filename,
-                                             "content": base64.b64encode(attachment_bytes).decode("ascii")}]})
+                      headers={"Authorization": "Bearer " + api_key}, json=payload)
         if r.status_code >= 300:
             return False, "Email send failed: %s" % r.text[:200]
         return True, "sent"
@@ -148,15 +174,24 @@ def _email_resend_attachment(to_email, subject, body, attachment_bytes, filename
         return False, "Email send failed: %s" % exc
 
 
-def _email_gmail_attachment(to_email, subject, body, attachment_bytes, filename, mime):
+def _email_gmail_attachment(to_email, subject, body, attachment_bytes, filename, mime, html=None):
     user = settings.get("gmail_user")
     password = settings.get("gmail_app_password")
     try:
-        msg = MIMEMultipart()
+        # mixed(alternative(text, html), attachment) - the nesting matters:
+        # a flat multipart with an html part beside a PDF makes some clients
+        # show the attachment and drop the body.
+        msg = MIMEMultipart("mixed")
         msg["Subject"] = subject
-        msg["From"] = user
+        msg["From"] = ('%s <%s>' % (settings.business_name(), user)) if settings.business_name() else user
         msg["To"] = to_email
-        msg.attach(MIMEText(body))
+        if html:
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(body, "plain", "utf-8"))
+            alt.attach(MIMEText(html, "html", "utf-8"))
+            msg.attach(alt)
+        else:
+            msg.attach(MIMEText(body, "plain", "utf-8"))
         part = MIMEApplication(attachment_bytes, _subtype=mime.split("/")[-1])
         part.add_header("Content-Disposition", "attachment", filename=filename)
         msg.attach(part)
@@ -169,24 +204,37 @@ def _email_gmail_attachment(to_email, subject, body, attachment_bytes, filename,
         return False, "Email send failed: %s" % exc
 
 
-# --------------------------------------------------------- message bodies
+# --------------------------------------------------------- WhatsApp bodies
+# Short, plain, and skimmable on a phone. The long-form, formatted versions
+# of all three of these live in emails.py - WhatsApp is the nudge, email is
+# the record.
 def subscription_link_message(client_name, business, plan_name, amount_rupees, url):
     return (
-        "Hi %s, thanks for working with %s!\n\n"
-        "To activate your %s plan (₹%s/month), please complete setup here:\n%s\n\n"
-        "This authorizes an automatic monthly payment — cancel anytime."
-        % (client_name, business, plan_name, amount_rupees, url))
+        "Hi %s 👋\n\n"
+        "Your %s plan with %s is ready to activate — ₹%s/month.\n\n"
+        "Set it up here (takes a minute):\n%s\n\n"
+        "You'll pay securely via Razorpay, and it renews automatically each month so you "
+        "never have to remember it. An invoice reaches your email after every payment, and "
+        "you can cancel any time."
+        % (client_name, plan_name, business, amount_rupees, url))
 
 
-def payment_receipt_message(client_name, business, plan_name, amount_rupees):
+def payment_receipt_message(client_name, business, plan_name, amount_rupees, inv_no=None):
     return (
-        "Hi %s, your ₹%s payment for the %s plan with %s was received. "
-        "Thank you for staying subscribed!" % (client_name, amount_rupees, plan_name, business))
+        "Hi %s ✅\n\n"
+        "We've received your ₹%s payment for the %s plan with %s.%s\n\n"
+        "Your invoice has been emailed to you. Nothing else needed — the next payment "
+        "happens automatically. Thank you!"
+        % (client_name, amount_rupees, plan_name, business,
+           ("\nInvoice: %s" % inv_no) if inv_no else ""))
 
 
 def payment_failed_message(client_name, business, plan_name, support_email, support_phone):
     contact = support_email or support_phone or "us"
     return (
-        "Hi %s, we couldn't process this month's payment for your %s plan with %s. "
-        "Please update your payment method to avoid interruption, or reach out to %s."
+        "Hi %s,\n\n"
+        "This month's payment for your %s plan with %s didn't go through — usually an "
+        "expired card or a bank decline.\n\n"
+        "Razorpay will retry automatically over the next few days and your service keeps "
+        "running meanwhile. To sort it out now, reply here or contact %s."
         % (client_name, plan_name, business, contact))

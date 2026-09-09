@@ -63,6 +63,10 @@ FIELDS = {
         "Support email", "Shown to clients if a payment fails."),
     "support_phone": ("SUPPORT_PHONE", False,
         "Support phone / WhatsApp", "Shown to clients if a payment fails."),
+    "site_url": ("SITE_URL", False,
+        "Your CRM's public address", "e.g. https://crm.nevorai.com - used to build the "
+                                     "invoice download and policy links inside client emails. "
+                                     "Emails still send without it, just with fewer links."),
     # --- tax / invoicing ------------------------------------------------
     "business_address": ("BUSINESS_ADDRESS", False,
         "Registered business address", "Printed on the invoice letterhead."),
@@ -82,7 +86,8 @@ GROUPS = [
                   "twilio_account_sid", "twilio_auth_token", "twilio_whatsapp_from"]),
     ("Email", ["resend_api_key", "resend_from_email", "gmail_user", "gmail_app_password"]),
     ("AI providers", ["anthropic_api_key", "gemini_api_key", "openai_api_key"]),
-    ("Business details", ["business_name", "support_email", "support_phone", "business_address"]),
+    ("Business details", ["business_name", "support_email", "support_phone", "business_address",
+                          "site_url"]),
     ("Tax & invoicing", ["gstin", "gst_rate_percent"]),
 ]
 
@@ -279,6 +284,13 @@ def support_phone():
 
 def business_address():
     return get("business_address")
+
+
+def site_url():
+    """Public base address of this CRM, without a trailing slash. Blank until
+    configured - callers must treat "no site url" as "build no link", never
+    as "guess one"."""
+    return get("site_url").rstrip("/")
 
 
 def gstin():

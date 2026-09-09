@@ -63,5 +63,57 @@
     </main>
   </div>
 </div>
+
+<div id="nprog" aria-hidden="true"></div>
+<script>
+// Two small things that make the app feel immediate on a server-rendered
+// stack. Neither makes the server faster - the honest fix for cold starts is
+// a warm host - but together they remove the two things that read as "slow":
+//   1. prefetch on hover/touch, so the next page is usually already in the
+//      browser cache by the time the click lands;
+//   2. a progress bar the instant a click is registered, so a navigation
+//      never looks like it was ignored.
+(function () {
+  var bar = document.getElementById('nprog');
+  var asked = {};
+
+  function internal(a) {
+    return a && a.href && a.origin === location.origin && !a.target &&
+           (a.getAttribute('href') || '')[0] !== '#' && !a.hasAttribute('download');
+  }
+  function nearest(e) { return e.target && e.target.closest ? e.target.closest('a') : null; }
+
+  function prefetch(e) {
+    var a = nearest(e);
+    if (!internal(a) || asked[a.href]) return;
+    asked[a.href] = 1;
+    var l = document.createElement('link');
+    l.rel = 'prefetch';
+    l.href = a.href;
+    document.head.appendChild(l);
+  }
+  document.addEventListener('mouseover', prefetch, { passive: true });
+  document.addEventListener('touchstart', prefetch, { passive: true });
+
+  function start() {
+    bar.style.transition = 'none';
+    bar.style.width = '0';
+    bar.offsetWidth;                       // force the reset to take effect
+    bar.style.transition = 'width 8s cubic-bezier(.1,.8,.2,1), opacity .2s';
+    bar.style.opacity = '1';
+    bar.style.width = '92%';
+  }
+  document.addEventListener('click', function (e) {
+    if (e.button === 0 && !e.metaKey && !e.ctrlKey && internal(nearest(e))) start();
+  });
+  document.addEventListener('submit', start);
+  window.addEventListener('pageshow', function () {
+    bar.style.transition = 'width .2s, opacity .3s';
+    bar.style.width = '100%';
+    bar.style.opacity = '0';
+    setTimeout(function () { bar.style.width = '0'; }, 320);
+  });
+})();
+</script>
 </body>
 </html>

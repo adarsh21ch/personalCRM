@@ -1,7 +1,10 @@
 :root {
   --ink: #16171b; --sub: #6b7080; --line: #e7e8ec; --line-soft: #eef0f3;
   --bg: #f5f6f8; --card: #ffffff;
-  --accent: #4f46e5; --accent-hover: #433cd1; --accent-soft: #eef0fe; --accent-ink: #ffffff;
+  /* Saffron, matching the public site. On a light admin surface the button
+     text has to go dark - white on saffron fails contrast badly. */
+  --accent: #e07b00; --accent-hover: #c96d00; --accent-soft: #fff3e3; --accent-ink: #ffffff;
+  --accent-bright: #ff9933;
   --ok: #067647; --ok-bg: #d1fadf;
   --pending: #b54708; --pending-bg: #fef0c7;
   --bad: #b42318; --bad-bg: #fee4e2;
@@ -150,3 +153,14 @@ button:hover, .btn:hover { background: var(--accent-hover); text-decoration: non
   border-radius: 8px; padding: 10px 12px; font-size: 13px; word-break: break-all; margin-top: 10px; }
 
 .center-page { max-width: 480px; margin: 14vh auto; text-align: center; }
+
+/* Navigation progress bar - see the script in base.html. Fixed to the very
+   top so it reads as browser chrome rather than page content. */
+#nprog {
+  position: fixed; top: 0; left: 0; height: 2.5px; width: 0; opacity: 0; z-index: 100;
+  background: linear-gradient(90deg, var(--accent-bright), var(--accent));
+  box-shadow: 0 0 8px rgba(255,153,51,.5); pointer-events: none;
+}
+
+details > summary { list-style: revert; }
+details > summary:hover { color: var(--ink); }

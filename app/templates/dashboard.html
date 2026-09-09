@@ -11,6 +11,11 @@
   <a href="/admin/settings">add your Razorpay keys</a>.</div>
 {% endif %}
 
+{% if request.query_params.get('deleted') %}
+<div class="ok-box">Deleted <strong>{{ request.query_params.get('deleted') }}</strong> and all their records.
+  Any active subscription was cancelled in Razorpay first.</div>
+{% endif %}
+
 {% if stats.error %}
 <div class="error-box">Couldn't load live data from the database ({{ stats.error }}). The numbers below may be
   stale or zero — try reloading the page in a moment.</div>

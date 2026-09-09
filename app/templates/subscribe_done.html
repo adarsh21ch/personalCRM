@@ -3,19 +3,150 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Thank you — {{ business }}</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>You're subscribed — {{ business }}</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg:#0a0a0c; --card:#121216; --ink:#f5f6f8; --sub:#9a9ca6; --line:#26262d;
+    --accent:#ff9933; --accent-ink:#0a0a0c; --ok:#3ddc84;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+       -webkit-font-smoothing:antialiased;}
+  .page{max-width:460px;margin:0 auto;padding:44px 20px 60px;}
+
+  .brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:32px;}
+  .brand-mark{width:32px;height:32px;border-radius:9px;background:var(--accent);color:var(--accent-ink);
+              display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;}
+  .brand-name{font-weight:700;font-size:16px;}
+
+  .tick-wrap{display:flex;justify-content:center;margin-bottom:20px;}
+  .tick{width:56px;height:56px;border-radius:50%;background:rgba(61,220,132,.13);
+        display:flex;align-items:center;justify-content:center;color:var(--ok);}
+  .tick.waiting{background:rgba(255,153,51,.13);color:var(--accent);}
+  .spin{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  h1{font-size:24px;line-height:1.25;letter-spacing:-.02em;margin:0 0 10px;text-align:center;}
+  .lede{color:var(--sub);text-align:center;margin:0 0 26px;font-size:14.5px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;}
+  .row{display:flex;justify-content:space-between;gap:14px;font-size:13.5px;padding:9px 0;}
+  .row + .row{border-top:1px solid var(--line);}
+  .row .k{color:var(--sub);}
+  .row .v{font-weight:600;text-align:right;}
+
+  .note{display:flex;gap:11px;background:rgba(255,153,51,.09);border:1px solid rgba(255,153,51,.22);
+        border-radius:11px;padding:13px 15px;margin-top:18px;font-size:13.5px;color:var(--sub);
+        line-height:1.55;}
+  .note strong{color:var(--ink);}
+
+  .btn{display:block;text-align:center;margin-top:18px;background:var(--accent);color:var(--accent-ink);
+       border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;text-decoration:none;}
+  .btn:hover{background:#ffb266;}
+  .btn.pending{background:transparent;color:var(--sub);border:1px solid var(--line);cursor:default;}
+
+  .foot{margin-top:26px;text-align:center;color:var(--sub);font-size:12px;line-height:1.9;}
+  .foot a{color:var(--sub);}
+  @media (max-width:480px){ .page{padding:32px 16px 50px} }
+</style>
 </head>
 <body>
-<main class="wrap">
-<div class="center-page">
-  <div class="card">
-    <h1>Thank you{{ ', ' + client.name if client else '' }}!</h1>
-    <p class="muted">Your subscription is set up. You'll get a confirmation once the first payment clears —
-      usually within a few minutes.</p>
-    <a class="btn" href="/" style="margin-top:10px;">Done</a>
+<div class="page">
+
+  <div class="brand">
+    <span class="brand-mark">{{ business[:1] | upper }}</span>
+    <span class="brand-name">{{ business }}</span>
   </div>
+
+  <div class="tick-wrap">
+    <div class="tick waiting" id="tick">
+      <svg class="spin" width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" opacity=".25"/>
+        <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <h1 id="headline">Confirming your payment…</h1>
+  <p class="lede" id="lede">
+    {% if client %}Thanks {{ client.name }} — this takes a few seconds.{% else %}This takes a few seconds.{% endif %}
+  </p>
+
+  <div class="card">
+    {% if plan %}
+    <div class="row"><span class="k">Plan</span><span class="v">{{ plan.name }}</span></div>
+    <div class="row"><span class="k">Amount</span><span class="v">₹{{ plan.amount_paise | rupees }} / month</span></div>
+    {% endif %}
+    <div class="row"><span class="k">Invoice</span><span class="v" id="inv-no">Preparing…</span></div>
+
+    <div class="note">
+      <span>📧</span>
+      <span id="mail-note"><strong>Your invoice is on its way to your email.</strong>
+        {% if client and client.email %}We're sending it to {{ client.email }}.{% endif %}
+        You can also download it here once it's ready.</span>
+    </div>
+
+    <a class="btn pending" id="dl" aria-disabled="true">Preparing invoice…</a>
+  </div>
+
+  <p class="foot">
+    Questions about this payment? Reply to the email we just sent you.<br>
+    <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> ·
+    <a href="/refund">Refund policy</a> · <a href="/contact">Contact</a>
+  </p>
+
 </div>
-</main>
+
+<script>
+// The browser gets back here before Razorpay's webhook has reached us, so
+// this page opens in a "confirming" state and settles once the payment is
+// actually recorded on our side - rather than claiming success up front and
+// offering an invoice that does not exist yet.
+(function () {
+  var tries = 0;
+  var tick = document.getElementById('tick');
+  var dl = document.getElementById('dl');
+
+  function done(data) {
+    tick.className = 'tick';
+    tick.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none">' +
+      '<path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    document.getElementById('headline').textContent = "You're subscribed";
+    document.getElementById('lede').textContent =
+      'Payment received' + (data.amount ? ' — ₹' + data.amount : '') +
+      '. Your subscription is active.';
+    document.getElementById('inv-no').textContent = data.invoice_no || 'Ready';
+    dl.className = 'btn';
+    dl.textContent = 'Download invoice (PDF)';
+    dl.setAttribute('href', data.invoice_url);
+    dl.removeAttribute('aria-disabled');
+  }
+
+  function slow() {
+    document.getElementById('headline').textContent = 'Payment submitted';
+    document.getElementById('lede').textContent =
+      'Your bank is still confirming. Nothing more is needed from you.';
+    document.getElementById('inv-no').textContent = 'Arriving by email';
+    document.getElementById('mail-note').innerHTML =
+      '<strong>Your invoice will be emailed as soon as the payment settles.</strong> ' +
+      'This usually happens within a few minutes.';
+    dl.style.display = 'none';
+  }
+
+  (function poll() {
+    fetch('/subscribe/{{ token }}/status')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.state === 'paid') return done(data);
+        if (++tries > 20) return slow();       // ~60s, then stop hammering
+        setTimeout(poll, 3000);
+      })
+      .catch(function () { if (++tries > 20) { slow(); } else { setTimeout(poll, 3000); } });
+  })();
+})();
+</script>
 </body>
 </html>

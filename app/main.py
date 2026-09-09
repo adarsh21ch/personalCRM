@@ -18,11 +18,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE]
 
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import (HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse,
+                               Response)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-import store, settings, auth, rzp, notify, invoice
+import store, settings, auth, rzp, notify, invoice, emails
 
 app = FastAPI(title="Personal CRM", docs_url=None, redoc_url=None)
 # check_dir=False: StaticFiles raises at construction time if the directory is
@@ -229,20 +230,49 @@ def dashboard(request: Request):
 @app.get("/admin/clients/new", response_class=HTMLResponse)
 def client_new_form(request: Request):
     require_admin(request)
-    return T.TemplateResponse("client_new.html", ctx(request))
+    plans = [p for p in store.list_rows("plans", order="amount_paise.asc")
+             if p["active"] and not p.get("client_id")]
+    return T.TemplateResponse("client_new.html", ctx(request, plans=plans))
 
 
 @app.post("/admin/clients")
 def client_create(request: Request, name: str = Form(...), email: str = Form(""),
                   phone: str = Form(""), company: str = Form(""), notes: str = Form(""),
-                  product_name: str = Form(""), product_url: str = Form("")):
+                  product_name: str = Form(""), product_url: str = Form(""),
+                  plan_id: str = Form(""), custom_amount: str = Form("")):
+    """Client, product and onboarding link in one submit. Doing this in three
+    round trips through three screens was the slow part of onboarding
+    somebody - not the typing."""
     require_admin(request)
     row = store.insert("clients", {"name": name.strip(), "email": email.strip(),
                                    "phone": phone.strip(), "company": company.strip(),
                                    "notes": notes.strip(), "status": "active"})
+    product = None
     if product_name.strip():
-        store.insert("products", {"client_id": row["id"], "name": product_name.strip(),
-                                  "url": product_url.strip(), "notes": ""})
+        product = store.insert("products", {"client_id": row["id"], "name": product_name.strip(),
+                                            "url": product_url.strip(), "notes": ""})
+
+    # Optional: mint the onboarding link straight away.
+    chosen = None
+    if (custom_amount or "").strip():
+        try:
+            amount = int(float(custom_amount))
+        except ValueError:
+            amount = 0
+        if amount >= 1:
+            plan_row = {"name": "Custom — %s" % row["name"][:40], "amount_paise": amount * 100,
+                        "interval": "monthly", "active": 0}
+            if store.supports("plans", "client_id"):
+                plan_row["client_id"] = row["id"]
+            chosen = store.insert("plans", plan_row)
+    elif plan_id:
+        chosen = store.get("plans", plan_id)
+
+    if chosen:
+        token = uuid.uuid4().hex
+        store.insert("onboard_tokens", {"client_id": row["id"], "plan_id": chosen["id"],
+                                        "product_id": (product or {}).get("id"), "token": token})
+        return RedirectResponse("/admin/clients/%s?link=%s" % (row["id"], token), status_code=303)
     return RedirectResponse("/admin/clients/%s" % row["id"], status_code=303)
 
 
@@ -252,15 +282,24 @@ def client_detail(request: Request, client_id: str, link: str = None):
     client = store.get("clients", client_id)
     if not client:
         raise HTTPException(404, "No such client.")
-    products = store.list_rows("products", where={"client_id": client_id}, order="created_at.asc")
-    subs = store.list_rows("subscriptions", where={"client_id": client_id})
-    payments = []
-    for s in subs:
-        payments += store.list_rows("payments", where={"subscription_id": s["id"]})
-    payments.sort(key=lambda p: p["created_at"], reverse=True)
-    all_plans = store.list_rows("plans", order="amount_paise.asc")
+    # One concurrent batch. This page used to issue a query per subscription
+    # just to collect payments, on top of four more in sequence - the slowest
+    # screen in the app, and the one opened most often.
+    products, subs, all_plans, all_tokens, all_payments = store.fetch_many([
+        dict(table="products", where={"client_id": client_id}, order="created_at.asc"),
+        dict(table="subscriptions", where={"client_id": client_id}),
+        dict(table="plans", order="amount_paise.asc"),
+        dict(table="onboard_tokens", where={"client_id": client_id}),
+        dict(table="payments", limit=10000),
+    ])
+    sub_ids = {s["id"] for s in subs}
+    payments = sorted((p for p in all_payments if p["subscription_id"] in sub_ids),
+                      key=lambda p: p["created_at"], reverse=True)
     plans_by_id = {p["id"]: p for p in all_plans}
-    active_plans = [p for p in all_plans if p["active"]]
+    # Custom plans belong to one client and never appear in anyone else's picker.
+    active_plans = [p for p in all_plans
+                    if p["active"] and (p.get("client_id") or client_id) == client_id]
+    custom_plans = [p for p in all_plans if p.get("client_id") == client_id]
 
     # Links already sent but not yet acted on: a link generated here does NOT
     # create a subscription row - that only happens once the client actually
@@ -269,7 +308,6 @@ def client_detail(request: Request, client_id: str, link: str = None):
     # picker below just resets to the cheapest plan every time, looking like
     # nothing happened.
     base_url = str(request.base_url).rstrip("/")
-    all_tokens = store.list_rows("onboard_tokens", where={"client_id": client_id})
     pending_links = [dict(t, plan=plans_by_id.get(t["plan_id"]),
                           url="%s/subscribe/%s" % (base_url, t["token"]))
                      for t in all_tokens if not t.get("subscription_id")]
@@ -280,8 +318,9 @@ def client_detail(request: Request, client_id: str, link: str = None):
         link_url = "%s/subscribe/%s" % (base_url, link)
     return T.TemplateResponse("client_detail.html", ctx(
         request, client=client, products=products, subs=subs, payments=payments,
-        plans=active_plans, plans_by_id=plans_by_id, link_url=link_url,
-        pending_links=pending_links, sent=request.query_params.get("sent")))
+        plans=active_plans, custom_plans=custom_plans, plans_by_id=plans_by_id,
+        link_url=link_url, pending_links=pending_links,
+        sent=request.query_params.get("sent")))
 
 
 @app.post("/admin/clients/{client_id}/edit")
@@ -300,6 +339,65 @@ def product_add(request: Request, client_id: str, name: str = Form(...), url: st
     require_admin(request)
     store.insert("products", {"client_id": client_id, "name": name.strip(), "url": url.strip(), "notes": ""})
     return RedirectResponse("/admin/clients/%s" % client_id, status_code=303)
+
+
+@app.post("/admin/clients/{client_id}/custom-plan")
+def create_custom_plan(request: Request, client_id: str, amount_rupees: int = Form(...),
+                       name: str = Form(""), product_id: str = Form("")):
+    """A one-off price agreed with a single client. Stored as a plan row like
+    any other - Razorpay needs a Plan object per amount either way - but
+    inactive and tagged to this client, so it stays out of the shared plan
+    list, every other client's picker, and the public homepage."""
+    require_admin(request)
+    client = store.get("clients", client_id)
+    if not client:
+        raise HTTPException(404, "No such client.")
+    if amount_rupees < 1:
+        raise HTTPException(400, "A plan amount has to be at least ₹1.")
+    row = {"name": (name.strip() or "Custom — %s" % client["name"])[:60],
+           "amount_paise": int(amount_rupees) * 100, "interval": "monthly", "active": 0}
+    if store.supports("plans", "client_id"):
+        row["client_id"] = client_id
+    plan = store.insert("plans", row)
+
+    token = uuid.uuid4().hex
+    store.insert("onboard_tokens", {"client_id": client_id, "plan_id": plan["id"],
+                                    "product_id": product_id or None, "token": token})
+    return RedirectResponse("/admin/clients/%s?link=%s" % (client_id, token), status_code=303)
+
+
+@app.post("/admin/clients/{client_id}/delete")
+def client_delete(request: Request, client_id: str):
+    """Remove a client and everything hanging off them. Any live Razorpay
+    subscription is cancelled FIRST - deleting our row would otherwise leave
+    Razorpay happily charging their card every month with nothing on this
+    side to show for it."""
+    require_admin(request)
+    client = store.get("clients", client_id)
+    if not client:
+        raise HTTPException(404, "No such client.")
+
+    subs = store.list_rows("subscriptions", where={"client_id": client_id})
+    for s in subs:
+        if s.get("rzp_subscription_id") and s["status"] not in ("cancelled", "completed", "expired") \
+                and settings.razorpay_ready():
+            try:
+                rzp.cancel_subscription(settings.razorpay_key_id(), settings.razorpay_key_secret(),
+                                        s["rzp_subscription_id"])
+            except rzp.RzpError as exc:
+                print("delete client: could not cancel %s: %s" % (s["rzp_subscription_id"], exc))
+        for p in store.list_rows("payments", where={"subscription_id": s["id"]}):
+            store.delete("payments", p["id"])
+        store.delete("subscriptions", s["id"])
+    for t in store.list_rows("onboard_tokens", where={"client_id": client_id}):
+        store.delete("onboard_tokens", t["id"])
+    for p in store.list_rows("products", where={"client_id": client_id}):
+        store.delete("products", p["id"])
+    if store.supports("plans", "client_id"):
+        for p in store.list_rows("plans", where={"client_id": client_id}):
+            store.delete("plans", p["id"])
+    store.delete("clients", client_id)
+    return RedirectResponse("/admin?deleted=%s" % client["name"][:40], status_code=303)
 
 
 @app.post("/admin/clients/{client_id}/link")
@@ -323,12 +421,16 @@ def send_link(request: Request, client_id: str, token: str = Form(...), channel:
     if not (client and row and plan):
         raise HTTPException(404, "No such link.")
     url = "%s/subscribe/%s" % (str(request.base_url).rstrip("/"), token)
-    msg = notify.subscription_link_message(client["name"], settings.business_name(),
-                                           plan["name"], rupees(plan["amount_paise"]), url)
+    product = store.get("products", row["product_id"]) if row.get("product_id") else None
+    amount = rupees(plan["amount_paise"])
     if channel == "whatsapp":
-        ok, info = notify.send_whatsapp(client["phone"], msg)
+        ok, info = notify.send_whatsapp(client["phone"], notify.subscription_link_message(
+            client["name"], settings.business_name(), plan["name"], amount, url))
     else:
-        ok, info = notify.send_email(client["email"], "Set up your %s subscription" % settings.business_name(), msg)
+        subject, text, html = emails.subscription_invite(
+            client["name"], plan["name"], amount, url,
+            product_name=(product or {}).get("name"))
+        ok, info = notify.send_email(client["email"], subject, text, html=html)
     return RedirectResponse("/admin/clients/%s?link=%s&sent=%s" % (client_id, token, "1" if ok else "0"),
                             status_code=303)
 
@@ -355,7 +457,10 @@ def subscription_cancel(request: Request, sub_id: str, reason: str = Form("")):
 @app.get("/admin/plans", response_class=HTMLResponse)
 def plans_list(request: Request):
     require_admin(request)
-    plans = store.list_rows("plans", order="amount_paise.asc")
+    # Per-client custom plans are deliberately absent: they belong to one
+    # client's page, not to the shared price list.
+    plans = [p for p in store.list_rows("plans", order="amount_paise.asc")
+             if not p.get("client_id")]
     return T.TemplateResponse("plans.html", ctx(request, plans=plans))
 
 
@@ -438,8 +543,10 @@ def subscribe_page(request: Request, token: str):
     plan = store.get("plans", row["plan_id"])
     if not (client and plan):
         raise HTTPException(404, "This link is not valid.")
+    product = store.get("products", row["product_id"]) if row.get("product_id") else None
     return T.TemplateResponse("subscribe.html", ctx(
-        request, client=client, plan=plan, token=token, rzp_key_id=settings.razorpay_key_id()))
+        request, client=client, plan=plan, product=product, token=token,
+        rzp_key_id=settings.razorpay_key_id()))
 
 
 @app.post("/subscribe/{token}/start")
@@ -491,7 +598,66 @@ def subscribe_start(token: str):
 def subscribe_done(request: Request, token: str):
     row = store.get_by("onboard_tokens", "token", token)
     client = store.get("clients", row["client_id"]) if row else None
-    return T.TemplateResponse("subscribe_done.html", ctx(request, client=client))
+    plan = store.get("plans", row["plan_id"]) if row else None
+    return T.TemplateResponse("subscribe_done.html", ctx(
+        request, client=client, plan=plan, token=token))
+
+
+def _token_payment(token):
+    """(subscription, latest captured payment) behind an onboarding token, or
+    (None, None). Both the status poll and the invoice download go through
+    this, so the token is the single thing that grants access to either."""
+    row = store.get_by("onboard_tokens", "token", token)
+    if not row or not row.get("subscription_id"):
+        return None, None
+    sub = store.get("subscriptions", row["subscription_id"])
+    if not sub:
+        return None, None
+    paid = [p for p in store.list_rows("payments", where={"subscription_id": sub["id"]})
+            if p["status"] == "captured"]
+    paid.sort(key=lambda p: p["created_at"], reverse=True)
+    return sub, (paid[0] if paid else None)
+
+
+@app.get("/subscribe/{token}/status")
+def subscribe_status(token: str):
+    """Polled by the confirmation page. Razorpay's webhook lands a second or
+    two after the browser returns, so the page opens in a "confirming"
+    state and this is what lets it settle into a real confirmation instead
+    of claiming success before the money is actually recorded."""
+    try:
+        sub, payment = _token_payment(token)
+    except Exception:
+        return JSONResponse({"state": "pending"})
+    if not sub:
+        return JSONResponse({"state": "pending"})
+    if payment:
+        return JSONResponse({"state": "paid",
+                             "invoice_no": invoice.invoice_number(payment),
+                             "invoice_url": "/invoice/%s" % payment["id"],
+                             "amount": rupees(payment["amount_paise"])})
+    if sub["status"] in ("cancelled", "expired"):
+        return JSONResponse({"state": "cancelled"})
+    return JSONResponse({"state": "pending"})
+
+
+@app.get("/invoice/{payment_id}")
+def invoice_download(payment_id: str):
+    """The PDF, by payment id. The id is a 16-character random hex - the same
+    unguessable-link model the onboarding token uses - because the client
+    receiving the invoice has no account here to log into."""
+    payment = store.get("payments", payment_id)
+    if not payment or payment["status"] != "captured":
+        raise HTTPException(404, "No invoice found for that payment.")
+    sub = store.get("subscriptions", payment["subscription_id"])
+    client = store.get("clients", sub["client_id"]) if sub else None
+    plan = store.get("plans", sub["plan_id"]) if sub else None
+    if not client:
+        raise HTTPException(404, "No invoice found for that payment.")
+    pdf = invoice.build_invoice_pdf(payment, client, plan)
+    inv_no = invoice.invoice_number(payment)
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": 'inline; filename="%s.pdf"' % inv_no})
 
 
 # ----------------------------------------------------------------- webhook
@@ -534,26 +700,30 @@ STATUS_MAP = {
 }
 
 
-def _send_payment_receipt(client, plan, payment):
-    """WhatsApp gets a short text notification; email gets the actual PDF
-    invoice attached, since WhatsApp text can't carry a document here. Both
-    are attempted independently - one failing must not skip the other, and
-    neither failing may break webhook processing, so every step is guarded."""
+def _send_payment_receipt(client, plan, payment, sub=None):
+    """WhatsApp gets a short text notification; email gets the branded
+    receipt with the actual PDF invoice attached, since WhatsApp text can't
+    carry a document here. Both are attempted independently - one failing
+    must not skip the other, and neither failing may break webhook
+    processing, so every step is guarded."""
     amount_str = rupees(payment["amount_paise"])
+    inv_no = invoice.invoice_number(payment)
     try:
-        notify.send_whatsapp(client["phone"],
-            notify.payment_receipt_message(client["name"], settings.business_name(), plan["name"], amount_str))
+        notify.send_whatsapp(client["phone"], notify.payment_receipt_message(
+            client["name"], settings.business_name(), plan["name"], amount_str, inv_no))
     except Exception as exc:
         print("payment receipt: whatsapp send failed: %s" % exc)
 
     try:
         pdf = invoice.build_invoice_pdf(payment, client, plan)
-        inv_no = invoice.invoice_number(payment)
-        subject = "Payment received — Invoice %s" % inv_no
-        body = ("Hi %s,\n\nThis confirms your payment of ₹%s for the %s plan with %s. "
-               "Your invoice is attached.\n\nThank you." % (
-                   client["name"], amount_str, plan["name"], settings.business_name()))
-        notify.send_email_with_attachment(client["email"], subject, body, pdf, "%s.pdf" % inv_no)
+        next_billing = (sub or {}).get("next_billing_at")
+        site = settings.site_url()
+        subject, text, html = emails.payment_receipt(
+            client["name"], plan["name"], amount_str, inv_no,
+            next_billing=next_billing[:10] if next_billing else None,
+            invoice_url=("%s/invoice/%s" % (site, payment["id"])) if site else None)
+        notify.send_email_with_attachment(client["email"], subject, text, pdf,
+                                          "%s.pdf" % inv_no, html=html)
     except Exception as exc:
         print("payment receipt: invoice email failed: %s" % exc)
 
@@ -587,14 +757,22 @@ def _handle_subscription_event(kind, rzp_sub, rzp_payment=None):
                 "subscription_id": sub["id"], "rzp_payment_id": rzp_payment["id"],
                 "amount_paise": rzp_payment.get("amount", plan["amount_paise"]),
                 "status": "captured", "method": rzp_payment.get("method", ""), "notes": ""})
-            _send_payment_receipt(client, plan, payment)
+            _send_payment_receipt(client, plan, payment, dict(sub, **patch))
 
     if kind == "subscription.halted":
-        msg = notify.payment_failed_message(client["name"], settings.business_name(), plan["name"],
-                                            settings.support_email(), settings.support_phone())
-        ok, _ = notify.send_whatsapp(client["phone"], msg)
-        if not ok:
-            notify.send_email(client["email"], "Payment failed", msg)
+        # Both channels, not one-or-the-other: a failing payment is the one
+        # message a client must not miss because a single provider hiccuped.
+        try:
+            notify.send_whatsapp(client["phone"], notify.payment_failed_message(
+                client["name"], settings.business_name(), plan["name"],
+                settings.support_email(), settings.support_phone()))
+        except Exception as exc:
+            print("payment failed notice: whatsapp send failed: %s" % exc)
+        try:
+            subject, text, html = emails.payment_failed(client["name"], plan["name"])
+            notify.send_email(client["email"], subject, text, html=html)
+        except Exception as exc:
+            print("payment failed notice: email failed: %s" % exc)
 
 
 def _handle_payment_failed(rzp_payment):
