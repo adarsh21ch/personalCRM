@@ -35,7 +35,8 @@
 <table>
   <tr><th>Client</th><th>Company</th><th>Products</th><th>Subscription</th><th>Amount</th><th>Status</th></tr>
   {% for c in clients %}
-  <tr onclick="location.href='/admin/clients/{{ c.id }}'" style="cursor:pointer">
+  <tr hx-get="/admin/clients/{{ c.id }}" hx-target="#main-content" hx-select="#main-content"
+      hx-swap="innerHTML" hx-push-url="true" style="cursor:pointer">
     <td><strong>{{ c.name }}</strong><br><span class="muted">{{ c.email or c.phone or '' }}</span></td>
     <td>{{ c.company or '—' }}</td>
     <td>{{ c.subs | length if c.subs else 0 }}</td>
