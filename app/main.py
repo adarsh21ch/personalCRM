@@ -190,12 +190,13 @@ def dashboard(request: Request):
         # sequential ones (the previous version fetched clients/subscriptions
         # twice over, once for stats and again for the table) - this was the
         # actual reason the dashboard felt slow to load.
-        clients, subs, plans, products, payments = store.fetch_many([
+        clients, subs, plans, products, payments, tokens = store.fetch_many([
             dict(table="clients", limit=500),
             dict(table="subscriptions", limit=1000),
             dict(table="plans", limit=500),
             dict(table="products", limit=10000),
             dict(table="payments", limit=10000),
+            dict(table="onboard_tokens", limit=1000),
         ])
     except Exception as exc:
         clients, plans_by_id, stats = _empty_dashboard("%s: %s" % (type(exc).__name__, exc))
@@ -216,8 +217,28 @@ def dashboard(request: Request):
             # which is what has actually landed.
             if STATUS_GROUPS.get(s["status"]) in ("pending", "declined"):
                 pending_paise += s["amount_paise"]
+        # A client with an old cancelled test plan AND a brand new mandate
+        # still awaiting the client's own click used to show whichever
+        # subscription happened to be most recently created - usually the
+        # stale cancelled one, since the new mandate has no subscription row
+        # at all yet (it is still just an onboard_tokens link). Sort each
+        # client's own subs so a live one (anything not cancelled/completed/
+        # expired) always wins the "which one do we show" pick, newest first
+        # within that.
+        TERMINAL = ("cancelled", "completed", "expired")
         for c in clients:
-            c["subs"] = by_client.get(c["id"], [])
+            c["subs"] = sorted(by_client.get(c["id"], []),
+                               key=lambda s: (s["status"] in TERMINAL, ),
+                               )
+        # subs came back created_at.desc already (list_rows' default) and
+        # Python's sort is stable, so the above only reorders live-vs-terminal
+        # and leaves recency as the tiebreaker within each group, unchanged.
+        pending_by_client = {}
+        for t in tokens:
+            if not t.get("subscription_id"):
+                pending_by_client.setdefault(t["client_id"], []).append(t)
+        for c in clients:
+            c["pending_link"] = bool(pending_by_client.get(c["id"]))
         collected_paise = sum(p["amount_paise"] for p in payments if p["status"] == "captured")
         stats = {"clients": len(clients), "products": len(products), "subscriptions": len(subs),
                  "by_status": by_status, "mrr_paise": mrr_paise, "collected_paise": collected_paise,
@@ -450,6 +471,30 @@ def subscription_cancel(request: Request, sub_id: str, reason: str = Form("")):
     store.patch("subscriptions", sub_id, {"status": "cancelled",
                                           "cancelled_at": datetime.utcnow().isoformat(timespec="seconds"),
                                           "cancel_reason": reason.strip()})
+    return RedirectResponse("/admin/clients/%s" % sub["client_id"], status_code=303)
+
+
+@app.post("/admin/subscriptions/{sub_id}/delete")
+def subscription_delete(request: Request, sub_id: str):
+    """Remove a subscription record that is already over - a cancelled test
+    plan, a completed/expired one - not a live one. Restricted to terminal
+    statuses on purpose: this deletes the LOCAL row only, never touches
+    Razorpay, so deleting an active or pending subscription would just hide
+    a mandate that is still charging the client every month with nothing
+    left here to show for it. Cancel it first (which does call Razorpay),
+    then delete.
+
+    crm_payments.subscription_id references this row ON DELETE CASCADE, so
+    any payment history tied to it goes with it - fine for the test/dummy
+    subscriptions this exists to clean up, which is why the template's
+    confirm() names that cost before the click."""
+    require_admin(request)
+    sub = store.get("subscriptions", sub_id)
+    if not sub:
+        raise HTTPException(404, "No such subscription.")
+    if sub["status"] not in ("cancelled", "completed", "expired"):
+        raise HTTPException(400, "Cancel this subscription before deleting it.")
+    store.delete("subscriptions", sub_id)
     return RedirectResponse("/admin/clients/%s" % sub["client_id"], status_code=303)
 
 

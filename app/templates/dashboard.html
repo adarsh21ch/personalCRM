@@ -40,11 +40,13 @@
     <td><strong>{{ c.name }}</strong><br><span class="muted">{{ c.email or c.phone or '' }}</span></td>
     <td>{{ c.company or '—' }}</td>
     <td>{{ c.subs | length if c.subs else 0 }}</td>
-    {% if c.subs %}
-      {% set s = c.subs[0] %}
+    {% set s = c.subs[0] if c.subs else None %}
+    {% if s and (s.status not in ('cancelled', 'completed', 'expired') or not c.pending_link) %}
       <td>{{ plans_by_id.get(s.plan_id, {}).get('name', '—') }}</td>
       <td>₹{{ s.amount_paise | rupees }}/mo</td>
       <td><span class="badge {{ status_group(s.status) }}">{{ status_label(s.status) }}</span></td>
+    {% elif c.pending_link %}
+      <td class="muted">Link sent</td><td>—</td><td><span class="badge pending">Awaiting client</span></td>
     {% else %}
       <td class="muted">No subscription</td><td>—</td><td><span class="badge cancelled">Not onboarded</span></td>
     {% endif %}
