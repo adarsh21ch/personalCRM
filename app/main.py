@@ -13,6 +13,7 @@ client's subscription.
 """
 import os, sys, json, hmac, hashlib, uuid
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE]
@@ -62,9 +63,20 @@ def rupees(paise):
     return "{:,}".format(int(paise or 0) // 100)
 
 
+def mshot(url, width=640):
+    """A screenshot of any public URL, via WordPress's free, keyless mshots
+    service - no API key, no storage of our own, no admin upload step. Their
+    cache renders it on first request (a generic placeholder for the first
+    handful of seconds, the real capture shortly after), so this is a nicety
+    that degrades to a plain image-load failure, never something that can
+    break the page itself."""
+    return "https://s.wordpress.com/mshots/v1/%s?w=%d" % (quote(url or "", safe=""), width)
+
+
 T.env.filters["rupees"] = rupees
 T.env.globals["status_label"] = lambda s: STATUS_LABEL.get(s, s)
 T.env.globals["status_group"] = lambda s: STATUS_GROUPS.get(s, "pending")
+T.env.globals["mshot"] = mshot
 
 
 @app.on_event("startup")
