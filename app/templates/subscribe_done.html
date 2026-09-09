@@ -8,7 +8,7 @@
 <style>
   :root {
     --bg:#0a0a0c; --card:#121216; --ink:#f5f6f8; --sub:#9a9ca6; --line:#26262d;
-    --accent:#ff9933; --accent-ink:#0a0a0c; --ok:#3ddc84;
+    --accent:#ffffff; --accent-ink:#0a0a0c; --ok:#3ddc84;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -24,7 +24,7 @@
   .tick-wrap{display:flex;justify-content:center;margin-bottom:20px;}
   .tick{width:56px;height:56px;border-radius:50%;background:rgba(61,220,132,.13);
         display:flex;align-items:center;justify-content:center;color:var(--ok);}
-  .tick.waiting{background:rgba(255,153,51,.13);color:var(--accent);}
+  .tick.waiting{background:rgba(245,246,248,.08);color:var(--ink);}
   .spin{animation:spin 1s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -37,14 +37,14 @@
   .row .k{color:var(--sub);}
   .row .v{font-weight:600;text-align:right;}
 
-  .note{display:flex;gap:11px;background:rgba(255,153,51,.09);border:1px solid rgba(255,153,51,.22);
+  .note{display:flex;gap:11px;background:rgba(245,246,248,.06);border:1px solid var(--line);
         border-radius:11px;padding:13px 15px;margin-top:18px;font-size:13.5px;color:var(--sub);
         line-height:1.55;}
   .note strong{color:var(--ink);}
 
   .btn{display:block;text-align:center;margin-top:18px;background:var(--accent);color:var(--accent-ink);
        border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;text-decoration:none;}
-  .btn:hover{background:#ffb266;}
+  .btn:hover{background:#d9dadd;}
   .btn.pending{background:transparent;color:var(--sub);border:1px solid var(--line);cursor:default;}
 
   .foot{margin-top:26px;text-align:center;color:var(--sub);font-size:12px;line-height:1.9;}

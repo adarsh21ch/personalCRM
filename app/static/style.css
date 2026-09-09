@@ -14,8 +14,29 @@
   --shadow-card: 0 1px 2px rgba(10,10,10,.04), 0 1px 10px rgba(10,10,10,.03);
   --shadow-pop: 0 8px 28px rgba(10,10,10,.12), 0 2px 6px rgba(10,10,10,.06);
   --shadow-lift: 0 1px 2px rgba(10,10,10,.08), 0 6px 16px rgba(10,10,10,.10);
+  --focus-ring: rgba(10,10,10,.07);
   --radius: 14px;
   --radius-sm: 10px;
+}
+
+/* Dark theme - toggled explicitly via the sidebar icon (base.html), not by
+   OS preference, and persisted in localStorage. Same monochrome rule: the
+   only accent is black/white inverted for contrast, status badges are the
+   sole functional color and get low-alpha tints instead of pastel fills so
+   they don't glare against a dark card. */
+:root[data-theme="dark"] {
+  --ink: #f5f6f7; --sub: #9a9aa3; --line: #2a2a2e; --line-soft: #202024;
+  --bg: #0a0a0b; --card: #141416;
+  --accent: #ffffff; --accent-hover: #d9dadd; --accent-soft: #232327; --accent-ink: #0a0a0b;
+  --ok: #3ddc84; --ok-bg: rgba(61,220,132,.15);
+  --pending: #ffb020; --pending-bg: rgba(255,176,32,.15);
+  --bad: #ff6b6b; --bad-bg: rgba(255,107,107,.15);
+  --dead: #9a9aa3; --dead-bg: rgba(154,154,163,.15);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-card: 0 1px 2px rgba(0,0,0,.3), 0 1px 10px rgba(0,0,0,.25);
+  --shadow-pop: 0 8px 28px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+  --shadow-lift: 0 1px 2px rgba(0,0,0,.4), 0 6px 16px rgba(0,0,0,.35);
+  --focus-ring: rgba(255,255,255,.14);
 }
 * { box-sizing: border-box; }
 body {
@@ -39,8 +60,8 @@ a:hover { text-decoration: underline; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); min-width: 0; }
 .brand:hover { text-decoration: none; }
 .brand-mark {
-  flex: 0 0 30px; width: 30px; height: 30px; border-radius: 10px; background: var(--ink);
-  color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;
+  flex: 0 0 30px; width: 30px; height: 30px; border-radius: 10px; background: var(--accent);
+  color: var(--accent-ink); font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;
 }
 .brand-name {
   font-weight: 700; font-size: 15px; letter-spacing: -.01em;
@@ -48,13 +69,24 @@ a:hover { text-decoration: underline; }
 }
 .nav-close, .nav-open { display: none; cursor: pointer; color: var(--sub); }
 
+.sidebar-top-actions { display: flex; align-items: center; gap: 2px; }
+.icon-btn {
+  display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--sub);
+  cursor: pointer; transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+.icon-btn:hover { background: var(--line-soft); color: var(--ink); transform: none; box-shadow: none; }
+.icon-btn .i-moon { display: none; }
+:root[data-theme="dark"] .icon-btn .i-sun { display: none; }
+:root[data-theme="dark"] .icon-btn .i-moon { display: block; }
+
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px; flex: 1; }
 .sidebar nav a {
   display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--radius-sm);
   color: var(--sub); font-weight: 500; font-size: 14px; transition: background .12s ease, color .12s ease;
 }
 .sidebar nav a:hover { background: var(--line-soft); color: var(--ink); text-decoration: none; }
-.sidebar nav a.active { background: var(--ink); color: #fff; font-weight: 600; }
+.sidebar nav a.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .nav-icon { display: flex; flex: 0 0 18px; color: currentColor; opacity: .85; }
 
 .sidebar-bottom { padding: 14px 16px 18px; border-top: 1px solid var(--line-soft); }
@@ -123,7 +155,7 @@ select, textarea {
   transition: border-color .12s ease, box-shadow .12s ease;
 }
 input:focus, select:focus, textarea:focus {
-  outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(10,10,10,.07);
+  outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--focus-ring);
 }
 textarea { min-height: 70px; resize: vertical; }
 .hint { font-size: 12px; color: var(--sub); margin-top: 4px; }

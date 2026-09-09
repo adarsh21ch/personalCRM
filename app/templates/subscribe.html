@@ -8,7 +8,7 @@
 <style>
   :root {
     --bg:#0a0a0c; --card:#121216; --ink:#f5f6f8; --sub:#9a9ca6; --line:#26262d;
-    --accent:#ff9933; --accent-ink:#0a0a0c; --ok:#3ddc84;
+    --accent:#ffffff; --accent-ink:#0a0a0c; --ok:#3ddc84;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -34,12 +34,12 @@
 
   .facts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px;}
   .facts li{display:flex;gap:10px;font-size:13.5px;color:var(--sub);line-height:1.5;}
-  .facts .tick{flex:0 0 16px;color:var(--accent);font-weight:700;}
+  .facts .tick{flex:0 0 16px;color:var(--ink);font-weight:700;}
 
   button{width:100%;margin-top:22px;background:var(--accent);color:var(--accent-ink);border:0;
          border-radius:10px;padding:15px 20px;font-size:15.5px;font-weight:700;cursor:pointer;
          font-family:inherit;transition:background .12s ease;}
-  button:hover:not(:disabled){background:#ffb266;}
+  button:hover:not(:disabled){background:#d9dadd;}
   button:disabled{opacity:.6;cursor:default;}
 
   .secure{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px;
@@ -127,7 +127,7 @@
         subscription_id: data.subscription_id,
         name: data.name,
         description: data.plan_name + ' — monthly subscription',
-        theme: { color: '#ff9933' },
+        theme: { color: '#0a0a0c' },
         prefill: data.prefill,
         handler: function () { window.location.href = '/subscribe/{{ token }}/done'; },
         modal: { ondismiss: function () { btn.disabled = false; btn.textContent = LABEL; } }
