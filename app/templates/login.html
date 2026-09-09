@@ -1,9 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Sign in{% endblock %}
 {% block content %}
-<div class="login-wrap">
-  <div class="card">
-    <h1>{{ business }}</h1>
+<style>
+  /* Split login card - scoped to this page only. The promo side always
+     inverts against whichever theme is active (var(--ink) as background,
+     var(--bg) as text) so it reads as a deliberate contrast panel rather
+     than "the same card, but half of it". */
+  .login-shell {
+    max-width: 900px; margin: 7vh auto; border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; display: grid; grid-template-columns: 1.05fr 1fr; box-shadow: var(--shadow-pop);
+    background: var(--card);
+  }
+  .login-promo {
+    background: var(--ink); color: var(--bg); padding: 52px 44px;
+    display: flex; flex-direction: column; justify-content: center; gap: 22px;
+  }
+  .login-promo .mark {
+    width: 38px; height: 38px; border-radius: 10px; background: var(--bg); color: var(--ink);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px;
+  }
+  .login-promo h2 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+  .login-promo p { margin: 0; opacity: .72; font-size: 14.5px; line-height: 1.6; max-width: 340px; }
+  .login-points { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .login-points li { display: flex; gap: 10px; font-size: 13.5px; opacity: .85; line-height: 1.5; }
+  .login-points li::before { content: "✓"; opacity: .6; flex: 0 0 auto; }
+  .login-form-side { padding: 52px 44px; display: flex; flex-direction: column; justify-content: center; }
+  .login-form-side h1 { margin: 0 0 4px; }
+  @media (max-width: 720px) {
+    .login-shell { grid-template-columns: 1fr; margin: 4vh auto; max-width: 460px; }
+    .login-promo { padding: 34px 30px; }
+    .login-points { display: none; }
+  }
+</style>
+<div class="login-shell">
+  <div class="login-promo">
+    <span class="mark">{{ business[:1] | upper }}</span>
+    <div>
+      <h2>{{ business }}</h2>
+      <p>Every client, every subscription, every payment — one place to run it from.</p>
+    </div>
+    <ul class="login-points">
+      <li>Track clients and subscriptions in one dashboard</li>
+      <li>Automatic monthly billing through Razorpay</li>
+      <li>Invoices and receipts sent without you lifting a finger</li>
+    </ul>
+  </div>
+  <div class="login-form-side">
+    <h1>Sign in</h1>
     <p class="muted">Sign in to your CRM.</p>
     {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
     <form method="post" action="/admin/login">
@@ -11,7 +54,7 @@
       <input type="email" id="email" name="email" required autofocus>
       <label for="password">Password</label>
       <input type="password" id="password" name="password" required>
-      <div style="margin-top:18px;"><button type="submit">Sign in</button></div>
+      <div style="margin-top:18px;"><button type="submit" style="width:100%;">Sign in</button></div>
     </form>
   </div>
 </div>
