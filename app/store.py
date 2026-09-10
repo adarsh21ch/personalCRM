@@ -291,7 +291,12 @@ def save_showcase_image(item_id, ext, content_type, data):
     with httpx.Client(base_url=SUPABASE_URL, timeout=30) as c:
         r = c.post("/storage/v1/object/%s/%s" % (SHOWCASE_BUCKET, object_path),
                   headers=headers, content=data)
-        if r.status_code == 404:
+        # Supabase Storage answers a missing bucket with HTTP 400 (not 404) and
+        # the real reason embedded in the JSON body - {"statusCode":"404",
+        # "error":"Bucket not found","code":"NoSuchBucket"} - confirmed against
+        # this app's own production error. Checking the wire status alone
+        # (r.status_code == 404) never caught this; check the body instead.
+        if r.status_code >= 400 and "NoSuchBucket" in r.text:
             # Bucket doesn't exist yet - create it (public, so the homepage
             # can hotlink the image with no signed-URL machinery) and retry
             # once, so there is no manual "create a bucket" step for anyone
