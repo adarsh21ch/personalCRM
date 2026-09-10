@@ -9,6 +9,10 @@
   run <code>supabase/migrations/0003_showcase.sql</code> in the SQL editor, then reload this page.</div>
 {% endif %}
 
+{% if upload_error %}
+<div class="error-box">Image upload failed: {{ upload_error }}</div>
+{% endif %}
+
 {% macro item_row(s) %}
 <tr>
   <td>
@@ -45,7 +49,8 @@
 <form id="toggle-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/toggle"></form>
 <form id="delete-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/delete"
       onsubmit="return confirm('Delete {{ s.name }} from the showcase?')"></form>
-<form id="image-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/image" enctype="multipart/form-data"></form>
+<form id="image-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/image"
+      enctype="multipart/form-data" hx-boost="false"></form>
 {% endmacro %}
 
 {% if items %}

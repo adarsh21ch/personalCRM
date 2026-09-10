@@ -13,6 +13,7 @@ client's subscription.
 """
 import os, sys, json, hmac, hashlib, uuid
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE]
@@ -581,7 +582,7 @@ def plan_delete(request: Request, plan_id: str):
 
 # ----------------------------------------------------------------- showcase
 @app.get("/admin/showcase", response_class=HTMLResponse)
-def showcase_list(request: Request):
+def showcase_list(request: Request, upload_error: str = None):
     require_admin(request)
     try:
         items = store.list_rows("showcase", order="created_at.desc", limit=200)
@@ -589,7 +590,8 @@ def showcase_list(request: Request):
     except Exception as exc:
         items = []
         problem = "%s: %s" % (type(exc).__name__, exc)
-    return T.TemplateResponse("showcase.html", ctx(request, items=items, problem=problem))
+    return T.TemplateResponse("showcase.html", ctx(
+        request, items=items, problem=problem, upload_error=upload_error))
 
 
 @app.post("/admin/showcase")
@@ -637,21 +639,34 @@ async def showcase_image(request: Request, item_id: str, file: UploadFile = File
     """A manually uploaded preview - replaces the auto-generated screenshot,
     which some sites never rendered for (behind auth, slow to respond, or
     just never got captured). No "generating preview" wait, no dependence
-    on a third party's screenshot service at all once one is uploaded."""
+    on a third party's screenshot service at all once one is uploaded.
+
+    Every failure path here redirects with ?upload_error=... rather than
+    raising, on purpose: this form is inside the hx-boost shell, and an
+    HTTPException's plain-text body has no #main-content for hx-select to
+    find, so htmx's swap silently does nothing - the admin sees no error at
+    all and it looks like the upload vanished. A redirect always produces a
+    normal, fully-rendered page whether or not htmx is involved, so the
+    reason is guaranteed to actually show up."""
     require_admin(request)
+
+    def failed(message):
+        return RedirectResponse("/admin/showcase?upload_error=" + quote(message), status_code=303)
+
     if not store.get("showcase", item_id):
         raise HTTPException(404, "No such showcase entry.")
-    if not store.supports("showcase", "image_url"):
-        raise HTTPException(400, "Run supabase/migrations/0004_showcase_image.sql first, "
-                                  "then reload this page.")
     ext = IMAGE_TYPES.get(file.content_type)
     if not ext:
-        raise HTTPException(400, "Please upload a JPEG, PNG, WEBP or GIF image.")
+        return failed("Please upload a JPEG, PNG, WEBP or GIF image.")
     data = await file.read()
     if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(400, "That image is over 6MB - please use a smaller file.")
-    url = store.save_showcase_image(item_id, ext, file.content_type, data)
-    store.patch("showcase", item_id, {"image_url": url})
+        return failed("That image is over 6MB - please use a smaller file.")
+    try:
+        url = store.save_showcase_image(item_id, ext, file.content_type, data)
+        store.patch("showcase", item_id, {"image_url": url})
+    except Exception as exc:
+        print("showcase image upload failed for %s: %s: %s" % (item_id, type(exc).__name__, exc))
+        return failed("Upload failed: %s" % exc)
     return RedirectResponse("/admin/showcase", status_code=303)
 
 

@@ -296,9 +296,11 @@ def save_showcase_image(item_id, ext, content_type, data):
             # can hotlink the image with no signed-URL machinery) and retry
             # once, so there is no manual "create a bucket" step for anyone
             # setting this up.
-            c.post("/storage/v1/bucket", headers={"apikey": SUPABASE_KEY,
-                   "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json"},
-                  json={"id": SHOWCASE_BUCKET, "name": SHOWCASE_BUCKET, "public": True})
+            b = c.post("/storage/v1/bucket", headers={"apikey": SUPABASE_KEY,
+                       "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json"},
+                      json={"id": SHOWCASE_BUCKET, "name": SHOWCASE_BUCKET, "public": True})
+            if b.status_code >= 400:
+                print("showcase bucket create -> %s %s" % (b.status_code, b.text[:300]))
             r = c.post("/storage/v1/object/%s/%s" % (SHOWCASE_BUCKET, object_path),
                       headers=headers, content=data)
         if r.status_code >= 400:
