@@ -631,7 +631,7 @@ def showcase_delete(request: Request, item_id: str):
 
 
 IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
-MAX_IMAGE_BYTES = 6 * 1024 * 1024
+MAX_IMAGE_BYTES = 4 * 1024 * 1024  # Vercel rejects any request body over 4.5MB before this code even runs
 
 
 @app.post("/admin/showcase/{item_id}/image")
@@ -660,7 +660,7 @@ async def showcase_image(request: Request, item_id: str, file: UploadFile = File
         return failed("Please upload a JPEG, PNG, WEBP or GIF image.")
     data = await file.read()
     if len(data) > MAX_IMAGE_BYTES:
-        return failed("That image is over 6MB - please use a smaller file.")
+        return failed("That image is over 4MB - please use a smaller file.")
     try:
         url = store.save_showcase_image(item_id, ext, file.content_type, data)
         store.patch("showcase", item_id, {"image_url": url})

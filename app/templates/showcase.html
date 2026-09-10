@@ -13,6 +13,28 @@
 <div class="error-box">Image upload failed: {{ upload_error }}</div>
 {% endif %}
 
+<script>
+// Vercel's serverless functions hard-reject any request body over 4.5MB
+// before our own code ever runs - that shows up as Vercel's own generic
+// branded error page, not anything this app can catch or word nicely. The
+// only way to avoid it is to stop an oversized file in the browser, before
+// it's ever sent.
+function checkAndUploadImage(input) {
+  var MAX = 4 * 1024 * 1024;
+  var f = input.files && input.files[0];
+  if (!f) return;
+  if (f.size > MAX) {
+    alert('That image is ' + (f.size / (1024 * 1024)).toFixed(1) + 'MB - please use one under 4MB.\n\n' +
+          'A phone screenshot is usually fine as-is; a full-resolution camera photo ' +
+          'or a screenshot from a large monitor often needs resizing or compressing first ' +
+          '(e.g. squoosh.app, or your phone\'s built-in "compress image" / export-quality option).');
+    input.value = '';
+    return;
+  }
+  input.form.requestSubmit();
+}
+</script>
+
 {% macro item_row(s) %}
 <tr>
   <td>
@@ -23,7 +45,7 @@
       <span class="muted" style="font-size:11px;flex:0 0 auto;">No image</span>
       {% endif %}
       <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" form="image-{{ s.id }}" name="file"
-             onchange="this.form.requestSubmit()" style="font-size:11px;max-width:130px;">
+             onchange="checkAndUploadImage(this)" style="font-size:11px;max-width:130px;">
     </div>
   </td>
   <td><input type="text" name="name" form="edit-{{ s.id }}" value="{{ s.name }}" required
