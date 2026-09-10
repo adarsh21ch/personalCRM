@@ -6,8 +6,14 @@
      inverts against whichever theme is active (var(--ink) as background,
      var(--bg) as text) so it reads as a deliberate contrast panel rather
      than "the same card, but half of it". */
+  /* True full-viewport centering instead of a fixed top margin - the old
+     "margin: 7vh auto" left a huge dead zone below the card on any real
+     desktop height, because 7vh from the top does not mean centered. */
+  .login-page {
+    min-height: calc(100vh - 64px); display: flex; align-items: center; justify-content: center;
+  }
   .login-shell {
-    max-width: 900px; margin: 7vh auto; border: 1px solid var(--line); border-radius: var(--radius);
+    width: 100%; max-width: 960px; border: 1px solid var(--line); border-radius: var(--radius);
     overflow: hidden; display: grid; grid-template-columns: 1.05fr 1fr; box-shadow: var(--shadow-pop);
     background: var(--card);
   }
@@ -27,11 +33,13 @@
   .login-form-side { padding: 52px 44px; display: flex; flex-direction: column; justify-content: center; }
   .login-form-side h1 { margin: 0 0 4px; }
   @media (max-width: 720px) {
-    .login-shell { grid-template-columns: 1fr; margin: 4vh auto; max-width: 460px; }
+    .login-page { min-height: auto; padding: 6vh 0; }
+    .login-shell { grid-template-columns: 1fr; max-width: 460px; }
     .login-promo { padding: 34px 30px; }
     .login-points { display: none; }
   }
 </style>
+<div class="login-page">
 <div class="login-shell">
   <div class="login-promo">
     <span class="mark">{{ business[:1] | upper }}</span>
@@ -57,5 +65,6 @@
       <div style="margin-top:18px;"><button type="submit" style="width:100%;">Sign in</button></div>
     </form>
   </div>
+</div>
 </div>
 {% endblock %}

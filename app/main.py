@@ -13,12 +13,11 @@ client's subscription.
 """
 import os, sys, json, hmac, hashlib, uuid
 from datetime import datetime, timedelta
-from urllib.parse import quote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE]
 
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
 from fastapi.responses import (HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse,
                                Response)
 from fastapi.staticfiles import StaticFiles
@@ -63,20 +62,9 @@ def rupees(paise):
     return "{:,}".format(int(paise or 0) // 100)
 
 
-def mshot(url, width=640):
-    """A screenshot of any public URL, via WordPress's free, keyless mshots
-    service - no API key, no storage of our own, no admin upload step. Their
-    cache renders it on first request (a generic placeholder for the first
-    handful of seconds, the real capture shortly after), so this is a nicety
-    that degrades to a plain image-load failure, never something that can
-    break the page itself."""
-    return "https://s.wordpress.com/mshots/v1/%s?w=%d" % (quote(url or "", safe=""), width)
-
-
 T.env.filters["rupees"] = rupees
 T.env.globals["status_label"] = lambda s: STATUS_LABEL.get(s, s)
 T.env.globals["status_group"] = lambda s: STATUS_GROUPS.get(s, "pending")
-T.env.globals["mshot"] = mshot
 
 
 @app.on_event("startup")
@@ -637,6 +625,33 @@ def showcase_toggle(request: Request, item_id: str):
 def showcase_delete(request: Request, item_id: str):
     require_admin(request)
     store.delete("showcase", item_id)
+    return RedirectResponse("/admin/showcase", status_code=303)
+
+
+IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+MAX_IMAGE_BYTES = 6 * 1024 * 1024
+
+
+@app.post("/admin/showcase/{item_id}/image")
+async def showcase_image(request: Request, item_id: str, file: UploadFile = File(...)):
+    """A manually uploaded preview - replaces the auto-generated screenshot,
+    which some sites never rendered for (behind auth, slow to respond, or
+    just never got captured). No "generating preview" wait, no dependence
+    on a third party's screenshot service at all once one is uploaded."""
+    require_admin(request)
+    if not store.get("showcase", item_id):
+        raise HTTPException(404, "No such showcase entry.")
+    if not store.supports("showcase", "image_url"):
+        raise HTTPException(400, "Run supabase/migrations/0004_showcase_image.sql first, "
+                                  "then reload this page.")
+    ext = IMAGE_TYPES.get(file.content_type)
+    if not ext:
+        raise HTTPException(400, "Please upload a JPEG, PNG, WEBP or GIF image.")
+    data = await file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(400, "That image is over 6MB - please use a smaller file.")
+    url = store.save_showcase_image(item_id, ext, file.content_type, data)
+    store.patch("showcase", item_id, {"image_url": url})
     return RedirectResponse("/admin/showcase", status_code=303)
 
 

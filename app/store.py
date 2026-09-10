@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS {p}app_settings (
 CREATE TABLE IF NOT EXISTS {p}showcase (
   id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
   name TEXT NOT NULL, url TEXT NOT NULL, description TEXT,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1, image_url TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_{p}products_client ON {p}products(client_id);
 CREATE INDEX IF NOT EXISTS idx_{p}subs_client ON {p}subscriptions(client_id);
@@ -95,7 +95,7 @@ TABLES = ("clients", "products", "plans", "subscriptions", "payments", "onboard_
 # touches an existing table, so SQLite needs these applied by hand; Supabase
 # gets them from supabase/migrations/, and supports() below keeps the app
 # working in the window before that migration is run.
-ADDED_COLUMNS = (("plans", "client_id", "TEXT"),)
+ADDED_COLUMNS = (("plans", "client_id", "TEXT"), ("showcase", "image_url", "TEXT"))
 
 
 # ------------------------------------------------------------------ supabase
@@ -254,6 +254,56 @@ def delete(table, row_id):
         return
     with _lock, _conn() as c:
         c.execute("DELETE FROM %s WHERE id = ?" % table, (row_id,))
+
+
+# -------------------------------------------------------------------- images
+# Admin-uploaded showcase screenshots. Supabase Storage in production (a
+# bucket in the same project the rest of this app's data already lives in -
+# no separate service to configure); a local static folder when running on
+# SQLite, since there is no object storage to talk to there. Vercel's own
+# filesystem is NOT used for this even when USE_SUPABASE is false - it is
+# ephemeral per invocation, so this path only makes sense for local dev.
+SHOWCASE_BUCKET = "showcase"
+_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "app", "static", "uploads", "showcase")
+
+
+def save_showcase_image(item_id, ext, content_type, data):
+    """Store one image for a showcase entry, overwriting any previous image
+    for that same id, and return the URL to save on the row."""
+    ext = (ext or "jpg").lstrip(".").lower()
+    if not USE_SUPABASE:
+        os.makedirs(_UPLOAD_DIR, exist_ok=True)
+        # Clear any previous extension for this id first, so switching from
+        # e.g. a .png to a .jpg doesn't leave the old file behind forever.
+        for old in os.listdir(_UPLOAD_DIR):
+            if old.rsplit(".", 1)[0] == item_id:
+                os.remove(os.path.join(_UPLOAD_DIR, old))
+        path = os.path.join(_UPLOAD_DIR, "%s.%s" % (item_id, ext))
+        with open(path, "wb") as f:
+            f.write(data)
+        return "/static/uploads/showcase/%s.%s" % (item_id, ext)
+
+    import httpx
+    object_path = "%s.%s" % (item_id, ext)
+    headers = {"apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+              "Content-Type": content_type or "application/octet-stream", "x-upsert": "true"}
+    with httpx.Client(base_url=SUPABASE_URL, timeout=30) as c:
+        r = c.post("/storage/v1/object/%s/%s" % (SHOWCASE_BUCKET, object_path),
+                  headers=headers, content=data)
+        if r.status_code == 404:
+            # Bucket doesn't exist yet - create it (public, so the homepage
+            # can hotlink the image with no signed-URL machinery) and retry
+            # once, so there is no manual "create a bucket" step for anyone
+            # setting this up.
+            c.post("/storage/v1/bucket", headers={"apikey": SUPABASE_KEY,
+                   "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json"},
+                  json={"id": SHOWCASE_BUCKET, "name": SHOWCASE_BUCKET, "public": True})
+            r = c.post("/storage/v1/object/%s/%s" % (SHOWCASE_BUCKET, object_path),
+                      headers=headers, content=data)
+        if r.status_code >= 400:
+            raise RuntimeError("Supabase Storage upload failed: %s %s" % (r.status_code, r.text[:300]))
+    return "%s/storage/v1/object/public/%s/%s" % (SUPABASE_URL, SHOWCASE_BUCKET, object_path)
 
 
 # ------------------------------------------------------------------ settings

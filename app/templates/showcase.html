@@ -11,6 +11,17 @@
 
 {% macro item_row(s) %}
 <tr>
+  <td>
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:nowrap;">
+      {% if s.image_url %}
+      <img src="{{ s.image_url }}" alt="" style="width:56px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:0 0 auto;">
+      {% else %}
+      <span class="muted" style="font-size:11px;flex:0 0 auto;">No image</span>
+      {% endif %}
+      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" form="image-{{ s.id }}" name="file"
+             onchange="this.form.requestSubmit()" style="font-size:11px;max-width:130px;">
+    </div>
+  </td>
   <td><input type="text" name="name" form="edit-{{ s.id }}" value="{{ s.name }}" required
              style="min-width:130px;padding:6px 9px;"></td>
   <td><input type="text" name="url" form="edit-{{ s.id }}" value="{{ s.url }}" required
@@ -34,11 +45,12 @@
 <form id="toggle-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/toggle"></form>
 <form id="delete-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/delete"
       onsubmit="return confirm('Delete {{ s.name }} from the showcase?')"></form>
+<form id="image-{{ s.id }}" method="post" action="/admin/showcase/{{ s.id }}/image" enctype="multipart/form-data"></form>
 {% endmacro %}
 
 {% if items %}
 <table style="margin-bottom:22px;">
-  <tr><th>Name</th><th>URL</th><th>Description</th><th>Status</th><th></th></tr>
+  <tr><th>Preview</th><th>Name</th><th>URL</th><th>Description</th><th>Status</th><th></th></tr>
   {% for s in items %}{{ item_row(s) }}{% endfor %}
 </table>
 {% for s in items %}{{ item_forms(s) }}{% endfor %}
