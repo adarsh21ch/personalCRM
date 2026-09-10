@@ -268,11 +268,13 @@ def build_invoice_pdf(payment, client, plan):
     y = _draw_lines(c, _wrap(c, "Amount in words: %s" % words, "Helvetica-Bold", 8.5, CONTENT_W),
                     MARGIN, y, "Helvetica-Bold", 8.5, 4.4 * mm, INK)
     y -= 1 * mm
-    ref = "Paid via Razorpay"
+    ref = "Paid via Razorpay" if payment.get("rzp_payment_id") else "Paid manually"
     if payment.get("method"):
         ref += " - %s" % payment["method"]
     if payment.get("rzp_payment_id"):
         ref += " - %s" % payment["rzp_payment_id"]
+    if payment.get("notes") and not payment.get("rzp_payment_id"):
+        ref += " (%s)" % payment["notes"]
     y = _draw_lines(c, _wrap(c, ref, "Helvetica", 8.5, CONTENT_W),
                     MARGIN, y, "Helvetica", 8.5, 4.4 * mm, SUB)
 

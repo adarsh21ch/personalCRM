@@ -460,6 +460,70 @@ def send_link(request: Request, client_id: str, token: str = Form(...), channel:
                             status_code=303)
 
 
+MANUAL_METHODS = {"bank_transfer": "Bank transfer", "cash": "Cash", "other": "Other"}
+
+
+def _record_manual_payment(sub, client, plan, amount_paise, method, reference):
+    """Common to both a first manual payment (which also just created `sub`)
+    and a later renewal against an existing one: record it the same way a
+    real Razorpay webhook would - payment logged, subscription activated and
+    its next billing date pushed a month out, receipt sent - so the
+    dashboard, the client's status and their invoice all behave exactly as
+    if Razorpay had processed it."""
+    patch = {"status": "active",
+             "next_billing_at": (datetime.utcnow() + timedelta(days=30)).isoformat(timespec="seconds")}
+    if not sub.get("started_at"):
+        patch["started_at"] = datetime.utcnow().isoformat(timespec="seconds")
+    store.patch("subscriptions", sub["id"], patch)
+
+    payment = store.insert("payments", {
+        "subscription_id": sub["id"], "rzp_payment_id": None,
+        "amount_paise": amount_paise, "status": "captured",
+        "method": MANUAL_METHODS.get(method, "Other"), "notes": reference.strip()[:300]})
+    _send_payment_receipt(client, plan, payment, dict(sub, **patch))
+
+
+@app.post("/admin/clients/{client_id}/manual-payment")
+def client_manual_payment(request: Request, client_id: str, plan_id: str = Form(...),
+                          amount_rupees: int = Form(...), method: str = Form("bank_transfer"),
+                          reference: str = Form("")):
+    """A client's first payment by direct bank transfer / cash instead of
+    Razorpay checkout - no mandate, no onboarding link. Creates the
+    subscription and records the payment in one step; later months use the
+    "Record payment" button that appears on the subscription once it exists."""
+    require_admin(request)
+    client = store.get("clients", client_id)
+    plan = store.get("plans", plan_id)
+    if not (client and plan):
+        raise HTTPException(404, "No such client or plan.")
+    if amount_rupees < 1:
+        raise HTTPException(400, "Enter a valid amount.")
+    sub = store.insert("subscriptions", {
+        "client_id": client_id, "product_id": None, "plan_id": plan_id,
+        "status": "created", "amount_paise": plan["amount_paise"]})
+    _record_manual_payment(sub, client, plan, amount_rupees * 100, method, reference)
+    return RedirectResponse("/admin/clients/%s" % client_id, status_code=303)
+
+
+@app.post("/admin/subscriptions/{sub_id}/manual-payment")
+def subscription_manual_payment(request: Request, sub_id: str, amount_rupees: int = Form(...),
+                                method: str = Form("bank_transfer"), reference: str = Form("")):
+    """A renewal payment - bank transfer, cash, or other - against a
+    subscription that already exists, landing outside Razorpay."""
+    require_admin(request)
+    sub = store.get("subscriptions", sub_id)
+    if not sub:
+        raise HTTPException(404, "No such subscription.")
+    client = store.get("clients", sub["client_id"])
+    plan = store.get("plans", sub["plan_id"])
+    if not (client and plan):
+        raise HTTPException(404, "No such client or plan.")
+    if amount_rupees < 1:
+        raise HTTPException(400, "Enter a valid amount.")
+    _record_manual_payment(sub, client, plan, amount_rupees * 100, method, reference)
+    return RedirectResponse("/admin/clients/%s" % sub["client_id"], status_code=303)
+
+
 @app.post("/admin/subscriptions/{sub_id}/cancel")
 def subscription_cancel(request: Request, sub_id: str, reason: str = Form("")):
     require_admin(request)

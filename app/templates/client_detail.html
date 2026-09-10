@@ -62,13 +62,40 @@
 <div class="card">
   {% if subs %}
   <table class="plain" style="margin-bottom:16px;">
-    <tr><th>Plan</th><th>Amount</th><th>Status</th><th>Next billing</th><th></th></tr>
+    <tr><th>Plan</th><th>Amount</th><th>Status</th><th>Next billing</th><th></th><th></th></tr>
     {% for s in subs %}
     <tr>
       <td>{{ plans_by_id.get(s.plan_id, {}).get('name', s.plan_id) }}</td>
       <td>₹{{ s.amount_paise | rupees }}/mo</td>
       <td><span class="badge {{ status_group(s.status) }}">{{ status_label(s.status) }}</span></td>
       <td>{{ s.next_billing_at[:10] if s.next_billing_at else '—' }}</td>
+      <td>
+        {% if s.status not in ('cancelled', 'completed', 'expired') %}
+        <details>
+          <summary class="btn secondary" style="display:inline-block;padding:4px 10px;font-size:12px;cursor:pointer;">
+            Record payment</summary>
+          <form method="post" action="/admin/subscriptions/{{ s.id }}/manual-payment"
+                style="margin-top:8px;min-width:200px;">
+            <label style="font-size:11px;">Amount received (₹)</label>
+            <input type="number" name="amount_rupees" min="1" required
+                   value="{{ (s.amount_paise / 100) | int }}" style="padding:6px 9px;">
+            <label style="font-size:11px;">How</label>
+            <select name="method" style="padding:6px 9px;">
+              <option value="bank_transfer">Bank transfer</option>
+              <option value="cash">Cash</option>
+              <option value="other">Other</option>
+            </select>
+            <label style="font-size:11px;">Reference (optional)</label>
+            <input type="text" name="reference" placeholder="UTR / txn no., anything to remember it by"
+                   style="padding:6px 9px;">
+            <div style="margin-top:8px;">
+              <button type="submit" class="btn secondary" style="padding:4px 10px;font-size:12px;">
+                Confirm — mark paid</button>
+            </div>
+          </form>
+        </details>
+        {% endif %}
+      </td>
       <td>
         {% if s.status not in ('cancelled', 'completed', 'expired') %}
         <form method="post" action="/admin/subscriptions/{{ s.id }}/cancel" class="inline-form"
@@ -148,6 +175,45 @@
     </p>
     {% endif %}
   </details>
+
+  {% if plans %}
+  <details style="margin-top:10px;">
+    <summary style="cursor:pointer;font-size:13.5px;color:var(--sub);">
+      Client pays by bank transfer / cash instead of Razorpay
+    </summary>
+    <p class="hint muted" style="margin:10px 0 12px;">
+      No mandate, no checkout link — this records their first payment and starts the
+      subscription as active in the same step. Every month after, use the "Record payment"
+      button that appears on it above. Either way the CRM behaves exactly as if Razorpay
+      had processed it: active status, receipt sent, invoice generated.
+    </p>
+    <form method="post" action="/admin/clients/{{ client.id }}/manual-payment" class="row" style="align-items:flex-end;">
+      <div style="flex:1;min-width:180px;">
+        <label style="font-size:11px;">Plan</label>
+        <select name="plan_id" required>
+          {% for p in plans %}<option value="{{ p.id }}">{{ p.name }} — ₹{{ p.amount_paise | rupees }}/mo</option>{% endfor %}
+        </select>
+      </div>
+      <div style="flex:0 0 130px;">
+        <label style="font-size:11px;">Amount received (₹)</label>
+        <input type="number" name="amount_rupees" min="1" required>
+      </div>
+      <div style="flex:0 0 150px;">
+        <label style="font-size:11px;">How</label>
+        <select name="method">
+          <option value="bank_transfer">Bank transfer</option>
+          <option value="cash">Cash</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:160px;">
+        <label style="font-size:11px;">Reference (optional)</label>
+        <input type="text" name="reference" placeholder="UTR / txn no.">
+      </div>
+      <button type="submit" class="btn secondary">Confirm — mark paid</button>
+    </form>
+  </details>
+  {% endif %}
 </div>
 
 <h2>Payment history</h2>
